@@ -24,24 +24,18 @@ public class modulec {
 
     private final FileSystem fileSystem;
 
+    private final List<String> additionalJarDirectoryPaths = new ArrayList<>();
+    private final List<String> additionalJavacArgs = new ArrayList<>();
+    private Path destPath = null;
+    private Path jarPath = null;
+    private String mainClass = null;
+    private Path manifestPath = null;
+    private String modulePath = null;
+    private String version = null;
+    private Path sourcePath = null;
+
     static class ModulecException extends RuntimeException {
         public ModulecException(String message) { super(message); }
-    }
-
-    public static void help() {
-        throw new ModulecException("Usage: modulec [OPTION...] SRC [-- JAVACARG...]\n" +
-                "Create a modular JAR file from module source in SRC.\n" +
-                "\n" +
-                "Options:\n" +
-                "  [-C RSRC]...            Include each resource directory RSRC.\n" +
-                "  -d DEST                 Directory for generated files like class files, by\n" +
-                "                          default target.\n" +
-                "  -e,--main-class CLASS   Specify the qualified main class.  If CLASS starts\n" +
-                "                          with '.' the main class will be MODULE.CLASS.\n" +
-                "  -f,--file JARPATH       Write JAR file to JARPATH instead of the default\n" +
-                "                          DEST/MODULE[-VERSION].jar.\n" +
-                "  -p,--module-path MPATH  The colon-separated module path.\n" +
-                "  -v,--version VERSION    The module version.");
     }
 
     public static void main(String... args) throws IOException {
@@ -59,56 +53,52 @@ public class modulec {
         }
     }
 
-    public modulec(FileSystem fileSystem) {
-        this.fileSystem = fileSystem;
+    public modulec(FileSystem fileSystem) { this.fileSystem = fileSystem; }
+
+    public void help() {
+        throw new ModulecException("Usage: modulec [OPTION...] SRC [-- JAVACARG...]\n" +
+                "Create a modular JAR file from module source in SRC.\n" +
+                "\n" +
+                "Options:\n" +
+                "  [-C RSRC]...            Include each resource directory RSRC.\n" +
+                "  -d DEST                 Directory for generated files like class files, by\n" +
+                "                          default target.\n" +
+                "  -e,--main-class CLASS   Specify the qualified main class.  If CLASS starts\n" +
+                "                          with '.' the main class will be MODULE.CLASS.\n" +
+                "  -f,--file JARPATH       Write JAR file to JARPATH instead of the default\n" +
+                "                          DEST/MODULE[-VERSION].jar.\n" +
+                "  -m,--manifest MANIFEST  Include the manifest information from MANIFEST file.\n" +
+                "  -p,--module-path MPATH  The colon-separated module path.\n" +
+                "  -v,--version VERSION    The module version.");
     }
 
-    /** As much of main() as possible that can be unit tested. */
-    int noExitMain(String... args) throws IOException {
-        var additionalJarDirectoryPaths = new ArrayList<String>();
-        Path destPath = fileSystem.getPath("target");
-        Path jarPath = null;
-        String mainClass = null;
-        String modulePath = null;
-        String version = null;
+    void parseOptions(String... args) {
+        destPath = fileSystem.getPath("target");
 
         int i = 0;
         for (; i < args.length; ++i) {
-            if (args[i].equals("-C")) {
-                if (++i >= args.length) {
-                    throw new ModulecException("error: " + args[i] + " requires an argument");
-                }
-                if (!Files.isDirectory(fileSystem.getPath(args[i]))) {
+            if (optionWithArgument(args, i, "-C")) {
+                if (!Files.isDirectory(fileSystem.getPath(args[++i]))) {
                     throw new ModulecException("error: " + args[i] + " is not a directory");
                 }
                 additionalJarDirectoryPaths.add(args[i]);
-            } else if (args[i].equals("-d")) {
-                if (++i >= args.length) {
-                    throw new ModulecException("error: " + args[i] + " requires an argument");
-                }
-                destPath = fileSystem.getPath(args[i]);
-            } else if (args[i].equals("-e") || args[i].equals("--main-class")) {
-                if (++i >= args.length) {
-                    throw new ModulecException("error: " + args[i] + " requires an argument");
-                }
-                mainClass = args[i];
-            } else if (args[i].equals("-f") || args[i].equals("--file")) {
-                if (++i >= args.length) {
-                    throw new ModulecException("error: " + args[i] + " requires an argument");
-                }
-                jarPath = fileSystem.getPath(args[i]);
-            } else if (args[i].equals("-h") || args[i].equals("--help")) {
+            } else if (optionWithArgument(args, i, "-d")) {
+                destPath = fileSystem.getPath(args[++i]);
+            } else if (optionWithArgument(args, i, "-e", "--main-class")) {
+                mainClass = args[++i];
+            } else if (optionWithArgument(args, i, "-f", "--file")) {
+                jarPath = fileSystem.getPath(args[++i]);
+            } else if (optionWithArgument(args, i, "-h", "-help")) {
                 help();
-            } else if (args[i].equals("-p") || args[i].equals("--module-path")) {
-                if (++i >= args.length) {
-                    throw new ModulecException("error: " + args[i] + "requires an argument");
+            } else if (optionWithArgument(args, i, "-m", "--manifest")) {
+                manifestPath = fileSystem.getPath(args[++i]);
+                if (!Files.exists(manifestPath)) {
+                    throw new ModulecException("error: there is no file " + args[i]);
                 }
-                modulePath = args[i];
-            } else if (args[i].equals("-v") || args[i].equals("--version")) {
-                if (++i >= args.length) {
-                    throw new ModulecException("error: " + args[i] + " requires an argument");
-                }
-                version = args[i];
+            } else if (optionWithArgument(args, i, "-p", "--module-path")) {
+                modulePath = args[++i];
+            } else if (optionWithArgument(args, i, "-v", "--version")) {
+                version = args[++i];
             } else {
                 break;
             }
@@ -118,7 +108,7 @@ public class modulec {
             throw new ModulecException("error: missing source directory");
         }
 
-        Path sourcePath = fileSystem.getPath(args[i++]);
+        sourcePath = fileSystem.getPath(args[i++]);
         if (!Files.isDirectory(sourcePath)) {
             throw new ModulecException("error: source directory does not exist: " + sourcePath);
         } else if (!Files.isReadable(sourcePath.resolve("module-info.java"))) {
@@ -133,10 +123,39 @@ public class modulec {
             }
         }
 
+        Arrays.stream(args, i, args.length).forEach(additionalJavacArgs::add);
+    }
+
+    private static boolean optionWithArgument(String[] args, int i, String... options) {
+        if (Stream.of(options).anyMatch(option -> option.equals(args[i]))) {
+            if (i + 1 >= args.length) {
+                throw new ModulecException("error: " + args[i] + " requires an argument");
+            }
+
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    /** As much of main() as possible that can be unit tested. */
+    int noExitMain(String... args) throws IOException {
+        parseOptions(args);
+
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         String moduleName = getModuleName(compiler, sourcePath.resolve("module-info.java"));
 
         var classesPath = destPath.resolve("classes");
+
+        int compileExitCode = compile(compiler, moduleName, classesPath);
+        if (compileExitCode != 0) {
+            return compileExitCode;
+        }
+
+        return jar(moduleName, classesPath);
+    }
+
+    private int compile(JavaCompiler compiler, String moduleName, Path classesPath) throws IOException {
         var javacDestPath = destPath.resolve("javac-classes");
         var moduleSourcePath = destPath.resolve("javac-src");
 
@@ -159,14 +178,12 @@ public class modulec {
         }
         javacArgs.add("-d");
         javacArgs.add(javacDestPath.toString());
-        Arrays.stream(args, i, args.length).forEach(javacArgs::add);
+        javacArgs.addAll(additionalJavacArgs);
 
-        int compileExitCode = compiler.run(System.in, System.out, System.out, javacArgs.toArray(String[]::new));
+        return compiler.run(System.in, System.out, System.out, javacArgs.toArray(String[]::new));
+    }
 
-        if (compileExitCode != 0) {
-            return compileExitCode;
-        }
-
+    private int jar(String moduleName, Path classesPath) throws IOException {
         var jarArgs = new ArrayList<String>();
         jarArgs.add("-c");
 
@@ -197,6 +214,7 @@ public class modulec {
 
         var jarToolProvider = java.util.spi.ToolProvider.findFirst("jar")
                 .orElseThrow(() -> new ModulecException("error: failed to find jar tool"));
+
         return jarToolProvider.run(System.out, System.out, jarArgs.toArray(String[]::new));
     }
 
