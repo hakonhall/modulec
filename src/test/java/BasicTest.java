@@ -1,3 +1,4 @@
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -16,8 +17,8 @@ class BasicTest {
     private final Path targetPath = basicPath.resolve("target");
     private final modulec modulec = new modulec(FileSystems.getDefault());
 
-    @BeforeEach
-    void setUp() throws IOException {
+    @BeforeEach @AfterEach
+    void setUp() {
         if (Files.exists(targetPath)) {
             deleteRecursively(targetPath.toFile());
         }
