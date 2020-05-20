@@ -1,3 +1,5 @@
+#!/home/hakon/share/jdk-11/bin/java --source 11
+
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.ModuleTree;
