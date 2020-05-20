@@ -1,18 +1,13 @@
-.PHONY: all install
+.PHONY: mvn-compile install
 
-all:
-	cd mod; mvn -nsu clean install
+all: mvn-compile install
 
-install: bin/modulec
+mvn-compile:
+	mvn -nsu clean install
 
-bin/modulec: src/main/java/modulec.java bin
+install: bin/modulec-shebang
+
+bin/modulec-shebang: src/main/java/modulec.java bin
 	printf "#!/home/hakon/share/jdk-11/bin/java --source 11\n\n" > $@
 	cat $< >> $@
 	chmod +x $@
-
-bin:
-	mkdir bin
-
-
-clean:
-	rm -rf bin
