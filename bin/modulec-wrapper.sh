@@ -22,10 +22,10 @@ fi
 # Therefore, the class path must be set to...
 class_path=$(readlink -m "$0/.."/../target/classes)
 
-if ! test -r "$class_path"/modulec.class
+if ! test -r "$class_path"/no/ion/modulec/ModuleCompiler.class
 then
-    echo "error: modulec file does not exist: $class_path/modulec.class"
+    echo "error: modulec file does not exist: $class_path/no/ion/modulec/ModuleCompiler.class"
     exit 1
 fi
 
-exec java -cp "$class_path" modulec "$@"
+exec java -cp "$class_path" no.ion.modulec.ModuleCompiler "$@"
