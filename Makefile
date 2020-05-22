@@ -1,13 +1,15 @@
-.PHONY: mvn-compile install
+.PHONY: all clean
 
-all: mvn-compile install
+all: bin/modulec-shebang
 
-mvn-compile:
-	mvn -nsu clean install
-
-install: bin/modulec-shebang
-
-bin/modulec-shebang: src/main/java/modulec.java bin
+bin/modulec-shebang: target/classes/no/ion/modulec/ModuleCompiler.class
 	printf "#!/home/hakon/share/jdk-11/bin/java --source 11\n\n" > $@
 	cat $< >> $@
 	chmod +x $@
+
+target/classes/no/ion/modulec/ModuleCompiler.class: src/main/java/no/ion/modulec/ModuleCompiler.java
+	mvn -nsu clean install
+
+clean:
+	rm -f bin/modulec-shebang
+	mvn -nsu clean
