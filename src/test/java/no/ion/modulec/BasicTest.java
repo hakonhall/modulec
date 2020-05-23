@@ -5,7 +5,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -23,7 +22,7 @@ class BasicTest {
     private final Path basicPath = fileSystem.getPath("src/test/resources/basic");
     private final Path targetPath = basicPath.resolve("target");
     private final String[] argsForBasic = {
-            "--build", basicPath.resolve("target").toString(),
+            "--output", basicPath.resolve("target").toString(),
             "--version", "1.2.3",
             "--main-class", "no.ion.tst1.Exported",
             "--module-path", ".",
@@ -89,7 +88,7 @@ class BasicTest {
     @Test
     void verifyMake() {
         var options = new ModuleCompiler.Options()
-                .setBuildDirectory(basicPath.resolve("target"))
+                .setOutputDirectory(basicPath.resolve("target"))
                 .setVersion(ModuleDescriptor.Version.parse("1.2.3"))
                 .setMainClass("no.ion.tst1.Exported")
                 .setModulePath(".")
