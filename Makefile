@@ -1,19 +1,39 @@
 .PHONY: all install clean
 
-all: bin/modulec-shebang
+all: bin/modulec-shebang target/mvn.ts
 
-install: ~/bin ~/bin/modulec
+# Used as a proxy for a mvn run
+target/mvn.ts: \
+  Makefile \
+  pom.xml \
+  src/main/java/no/ion/modulec/ModuleCompiler.java \
+  src/test/java/no/ion/modulec/ModuleCompilerTest.java \
+  src/test/java/no/ion/modulec/BasicTest.java \
+  src/test/java/no/ion/modulec/ModuleCompilerTest.java \
+  src/test/java/no/ion/modulec/BasicTest.java \
+  src/test/resources/help.txt \
+  src/test/resources/module-info-valid.java \
+  src/test/resources/basic/src/module-info.java \
+  src/test/resources/basic/src/no/ion/tst1/Exported.java \
+  src/test/resources/basic/manifest.mf \
+  src/test/resources/basic/rsrc/README.txt \
+  src/test/resources/module-info-invalid.java \
+  src/main/java/no/ion/modulec/ModuleCompiler.java
+	mvn -nsu clean install
+	touch $@
 
-~/bin/modulec:
-	ln -s $(PWD)/bin/modulec-wrapper.sh ~/bin/modulec
-
-bin/modulec-shebang: target/classes/no/ion/modulec/ModuleCompiler.class
+bin/modulec-shebang: src/main/java/no/ion/modulec/ModuleCompiler.java
 	printf "#!/home/hakon/share/jdk-11/bin/java --source 11\n\n" > $@
 	cat $< >> $@
 	chmod +x $@
 
-target/classes/no/ion/modulec/ModuleCompiler.class: src/main/java/no/ion/modulec/ModuleCompiler.java src/test/java/no/ion/modulec/ModuleCompilerTest.java src/test/java/no/ion/modulec/BasicTest.java
-	mvn -nsu clean install
+install: ~/bin ~/bin/modulec
+
+~/bin:
+	@echo "modulec wants to install in ~/bin, but directory does not exist"
+
+~/bin/modulec:
+	ln -s $(PWD)/bin/modulec-wrapper.sh ~/bin/modulec
 
 clean:
 	rm -f ~/bin/modulec
