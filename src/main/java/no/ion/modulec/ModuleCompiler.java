@@ -69,7 +69,7 @@ public class ModuleCompiler {
         final List<Path> resourceDirectories = new ArrayList<>();
         final List<String> javacArgs = new ArrayList<>();
         FileSystem fileSystem = FileSystems.getDefault();
-        Path buildDirectory = null;
+        Path outputDirectory = null;
         boolean dryRun = false;
         Path jarPath = null;
         String mainClass = null;
@@ -80,7 +80,7 @@ public class ModuleCompiler {
         boolean help = false;
 
         public Options() {}
-        public Options setBuildDirectory(Path path) { this.buildDirectory = path; return this; }
+        public Options setOutputDirectory(Path path) { this.outputDirectory = path; return this; }
         public Options setDryRun(boolean dryRun) { this.dryRun = dryRun; return this; }
         public Options setFileSystem(FileSystem fileSystem) { this.fileSystem = requireNonNull(fileSystem); return this; }
         public Options setJarPath(Path path) { this.jarPath = path; return this; }
@@ -144,7 +144,7 @@ public class ModuleCompiler {
             options.validate();
 
             String moduleName = getModuleName(options.sourceDirectory.resolve("module-info.java"));
-            var classesPath = options.buildDirectory.resolve("classes");
+            var classesPath = options.outputDirectory.resolve("classes");
 
             SuccessResult result = runJavaCompiler(options, moduleName, classesPath);
 
@@ -190,8 +190,8 @@ public class ModuleCompiler {
     }
 
     private SuccessResult runJavaCompiler(Options options, String moduleName, Path classesPath) throws IOException {
-        var javacDestPath = options.buildDirectory.resolve("javac-classes");
-        var moduleSourcePath = options.buildDirectory.resolve("javac-src");
+        var javacDestPath = options.outputDirectory.resolve("javac-classes");
+        var moduleSourcePath = options.outputDirectory.resolve("javac-src");
 
         Files.createDirectories(classesPath);
         ensureSymlinkTo(options, javacDestPath.resolve(moduleName), "../classes");
@@ -237,7 +237,7 @@ public class ModuleCompiler {
         if (jarPath == null) {
             String versionPart = options.version == null ? "" : "-" + options.version.toString();
             String filename = moduleName + versionPart + ".jar";
-            jarPath = options.buildDirectory.resolve(filename);
+            jarPath = options.outputDirectory.resolve(filename);
         }
         jarArgs.add("-f");
         jarArgs.add(jarPath.toString());
@@ -332,8 +332,6 @@ public class ModuleCompiler {
                 "Create a modular JAR file from module source in SRC.\n" +
                 "\n" +
                 "Options:\n" +
-                "  -b,--build BUILD        Output directory for generated files like class files\n" +
-                "                          and the JAR file, by default target.\n" +
                 "  [-C RSRC]...            Include each resource directory RSRC.\n" +
                 "  -e,--main-class CLASS   Specify the qualified main class.  If CLASS starts\n" +
                 "                          with '.' the main class will be MODULE.CLASS.\n" +
@@ -341,6 +339,8 @@ public class ModuleCompiler {
                 "                          TARGET/MODULE[-VERSION].jar.\n" +
                 "  -m,--manifest MANIFEST  Include the manifest information from MANIFEST file.\n" +
                 "  -n,--dry-run            Print javac and jar equivalents without execution.\n" +
+                "  -o,--output OUTDIR      Output directory for generated files like class files\n" +
+                "                          and the JAR file, by default target.\n" +
                 "  -p,--module-path MPATH  The colon-separated module path used for compilation.\n" +
                 "  -v,--version VERSION    The module version.\n";
 
@@ -350,14 +350,12 @@ public class ModuleCompiler {
         Options options = new Options();
 
         options.setFileSystem(fileSystem);
-        options.setBuildDirectory(fileSystem.getPath("target"));
+        options.setOutputDirectory(fileSystem.getPath("target"));
 
         int i = 0;
         for (; i < args.length; ++i) {
             if (isOptionWithArgument(args, i, "-C")) {
                 options.addResourceDirectories(fileSystem.getPath(args[++i]));
-            } else if (isOptionWithArgument(args, i, "-b", "--build")) {
-                options.setBuildDirectory(fileSystem.getPath(args[++i]));
             } else if (isOptionWithArgument(args, i, "-e", "--main-class")) {
                 options.setMainClass(args[++i]);
             } else if (isOptionWithArgument(args, i, "-f", "--file")) {
@@ -369,6 +367,8 @@ public class ModuleCompiler {
                 options.setManifestPath(fileSystem.getPath(args[++i]));
             } else if (isOption(args, i, "-n", "--dry-run")) {
                 options.setDryRun(true);
+            } else if (isOptionWithArgument(args, i, "-o", "--output")) {
+                options.setOutputDirectory(fileSystem.getPath(args[++i]));
             } else if (isOptionWithArgument(args, i, "-p", "--module-path")) {
                 options.setModulePath(args[++i]);
             } else if (isOptionWithArgument(args, i, "-v", "--version")) {

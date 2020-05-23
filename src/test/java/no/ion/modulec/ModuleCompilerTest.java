@@ -85,7 +85,7 @@ class ModuleCompilerTest {
         Path root = fileSystem.getPath("/project");
         Path sourcePath = root.resolve("src");
         Path moduleInfoPath = sourcePath.resolve("module-info.java");
-        Path buildDirectory = root.resolve("build");
+        Path outputDirectory = root.resolve("target");
         ModuleDescriptor.Version version = ModuleDescriptor.Version.parse("1.2.3");
         Path manifestPath = root.resolve("manifest.mf");
         Path resourceDirectory1 = root.resolve("rsrc1");
@@ -94,7 +94,7 @@ class ModuleCompilerTest {
 
         ModuleCompiler.Options options = new ModuleCompiler.Options()
                 .setFileSystem(fileSystem)
-                .setBuildDirectory(buildDirectory)
+                .setOutputDirectory(outputDirectory)
                 .addJavacArguments("javacarg1", "javacarg2")
                 .addResourceDirectories(resourceDirectory1, resourceDirectory2)
                 .setJarPath(jarPath)
@@ -118,10 +118,10 @@ class ModuleCompilerTest {
 
         javaCompiler.expectRun(0,
                 "-p", "a:b",
-                "--module-source-path", "/project/build/javac-src",
+                "--module-source-path", "/project/target/javac-src",
                 "-m", "no.ion.modulec.test",
                 "--module-version", "1.2.3",
-                "-d", "/project/build/javac-classes",
+                "-d", "/project/target/javac-classes",
                 "javacarg1", "javacarg2");
 
         jarTool.expectRun(0,
@@ -129,7 +129,7 @@ class ModuleCompilerTest {
                 "-f", "/project/foo.jar",
                 "-m", "/project/manifest.mf",
                 "-e", "no.ion.modulec.test.Main",
-                "-C", "/project/build/classes", ".",
+                "-C", "/project/target/classes", ".",
                 "-C", "/project/rsrc1", ".",
                 "-C", "/project/rsrc2", ".");
 
@@ -142,10 +142,10 @@ class ModuleCompilerTest {
         Optional<String> dryRunDiagnostics = dryRunResult.diagnostics();
         assertTrue(dryRunDiagnostics.isPresent());
         assertEquals(
-                "javac -p a:b --module-source-path /project/build/javac-src -m no.ion.modulec.test " +
-                        "--module-version 1.2.3 -d /project/build/javac-classes javacarg1 javacarg2\n" +
+                "javac -p a:b --module-source-path /project/target/javac-src -m no.ion.modulec.test " +
+                        "--module-version 1.2.3 -d /project/target/javac-classes javacarg1 javacarg2\n" +
                 "jar -c -f /project/foo.jar -m /project/manifest.mf -e no.ion.modulec.test.Main " +
-                        "-C /project/build/classes . -C /project/rsrc1 . -C /project/rsrc2 .\n",
+                        "-C /project/target/classes . -C /project/rsrc1 . -C /project/rsrc2 .\n",
                 dryRunDiagnostics.get());
 
     }
