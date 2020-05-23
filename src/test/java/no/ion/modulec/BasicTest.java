@@ -11,6 +11,7 @@ import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -77,12 +78,16 @@ class BasicTest {
     }
 
     @Test
-    void verifyNoExitMain() throws IOException {
-        verifyBasicIsBuilt(() -> ModuleCompiler.noExitMain(argsForBasic));
+    void verifyNoExitMain() {
+        verifyBasicIsBuilt(() -> {
+            ModuleCompiler.SuccessResult result = ModuleCompiler.mainApi(argsForBasic);
+            Optional<String> diagnostics = result.diagnostics();
+            assertTrue(diagnostics.isEmpty(), diagnostics::get);
+        });
     }
 
     @Test
-    void verifyMake() throws IOException {
+    void verifyMake() {
         var options = new ModuleCompiler.Options()
                 .setBuildDirectory(basicPath.resolve("target"))
                 .setVersion(ModuleDescriptor.Version.parse("1.2.3"))
@@ -91,15 +96,14 @@ class BasicTest {
                 .setManifestPath(basicPath.resolve("manifest.mf"))
                 .setSourceDirectory(basicPath.resolve("src"));
 
-        verifyBasicIsBuilt(() -> { ModuleCompiler.create().make(options); });
+        verifyBasicIsBuilt(() -> {
+            ModuleCompiler.SuccessResult result = ModuleCompiler.create().make(options);
+            Optional<String> diagnostics = result.diagnostics();
+            assertTrue(diagnostics.isEmpty(), diagnostics::get);
+        });
     }
 
-    @FunctionalInterface
-    interface ThrowingRunnable<T extends Exception> {
-        void run() throws T;
-    }
-
-    private <T extends Exception> void verifyBasicIsBuilt(ThrowingRunnable<T> runnable) throws T {
+    private void verifyBasicIsBuilt(Runnable runnable) {
         assertPathDoesNotExist("target");
 
         runnable.run();

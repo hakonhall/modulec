@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.spi.ToolProvider;
 
@@ -69,6 +70,14 @@ class ModuleCompilerTest {
         } catch (ModuleCompiler.ModuleCompilerException e) {
             assertEquals("error: -g requires an argument", e.getMessage());
         }
+    }
+
+    @Test
+    void verifyHelpOutput() throws IOException {
+        String expectedHelpText = Files.readString(Path.of("src/test/resources/help.txt"));
+        assertEquals(expectedHelpText, ModuleCompiler.getHelpText());
+        assertEquals(expectedHelpText, ModuleCompiler.mainApi("--help").diagnostics().get());
+        assertEquals(expectedHelpText, ModuleCompiler.mainApi("-h").diagnostics().get());
     }
 
     @Test
@@ -124,7 +133,21 @@ class ModuleCompilerTest {
                 "-C", "/project/rsrc1", ".",
                 "-C", "/project/rsrc2", ".");
 
-        mockedModuleCompiler.make(options);
+        ModuleCompiler.SuccessResult result = mockedModuleCompiler.make(options);
+        Optional<String> diagnostics = result.diagnostics();
+        assertTrue(diagnostics.isEmpty(), diagnostics::get);
+
+        options.setDryRun(true);
+        ModuleCompiler.SuccessResult dryRunResult = mockedModuleCompiler.make(options);
+        Optional<String> dryRunDiagnostics = dryRunResult.diagnostics();
+        assertTrue(dryRunDiagnostics.isPresent());
+        assertEquals(
+                "javac -p a:b --module-source-path /project/build/javac-src -m no.ion.modulec.test " +
+                        "--module-version 1.2.3 -d /project/build/javac-classes javacarg1 javacarg2\n" +
+                "jar -c -f /project/foo.jar -m /project/manifest.mf -e no.ion.modulec.test.Main " +
+                        "-C /project/build/classes . -C /project/rsrc1 . -C /project/rsrc2 .\n",
+                dryRunDiagnostics.get());
+
     }
 
     private static class MockModuleCompiler extends ModuleCompiler {

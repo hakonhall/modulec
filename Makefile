@@ -7,7 +7,7 @@ bin/modulec-shebang: target/classes/no/ion/modulec/ModuleCompiler.class
 	cat $< >> $@
 	chmod +x $@
 
-target/classes/no/ion/modulec/ModuleCompiler.class: src/main/java/no/ion/modulec/ModuleCompiler.java
+target/classes/no/ion/modulec/ModuleCompiler.class: src/main/java/no/ion/modulec/ModuleCompiler.java src/test/java/no/ion/modulec/ModuleCompilerTest.java src/test/java/no/ion/modulec/BasicTest.java
 	mvn -nsu clean install
 
 clean:
