@@ -10,7 +10,12 @@ import com.sun.source.util.JavacTask;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -21,10 +26,19 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * Makes modular JAR from module source.
+ *
+ * <p>This class can be invoked as a program, or accessed via {@link #make(Options)}.</p>
+ *
+ * @see <a href="https://github.com/hakonhall/modulec">https://github.com/hakonhall/modulec</a>
+ * @author hakonhall
+ */
 public class ModuleCompiler {
 
     private final JavaCompiler javaCompiler;
@@ -63,6 +77,7 @@ public class ModuleCompiler {
         String modulePath = null;
         ModuleDescriptor.Version version = null;
         Path sourceDirectory = null;
+        boolean help = false;
 
         public Options() {}
         public Options setBuildDirectory(Path path) { this.buildDirectory = path; return this; }
@@ -76,6 +91,7 @@ public class ModuleCompiler {
         public Options setVersion(ModuleDescriptor.Version version) { this.version = version; return this; }
         public Options addResourceDirectories(Path... paths) { Collections.addAll(resourceDirectories, paths); return this; }
         public Options addJavacArguments(String... arguments) { Collections.addAll(javacArgs, arguments); return this; }
+        public Options setHelp(boolean help) { this.help = help; return this; }
 
         public void validate() {
             resourceDirectories.stream().filter(path -> !Files.isDirectory(path)).findAny().ifPresent(resourceDirectory -> {
@@ -94,18 +110,47 @@ public class ModuleCompiler {
         }
     }
 
-    public void make(Options options) throws IOException {
-        options.validate();
+    public static class SuccessResult {
+        private final String compileOutput;
+        private String jarOutput = null;
 
-        String moduleName = getModuleName(options.sourceDirectory.resolve("module-info.java"));
-        var classesPath = options.buildDirectory.resolve("classes");
-
-        if (runJavaCompiler(options, moduleName, classesPath) != 0) {
-            throw new ModuleCompilerException("error: javac failed");
+        SuccessResult(String compileOutput) {
+            this.compileOutput = compileOutput.isBlank() ? null : compileOutput;
         }
 
-        if (runJarTool(options, moduleName, classesPath) != 0) {
-            throw new ModuleCompilerException("error: jar failed");
+        public Optional<String> diagnostics() {
+            if (jarOutput == null) {
+                return Optional.ofNullable(compileOutput);
+            } else if (compileOutput == null) {
+                return Optional.of(jarOutput);
+            } else {
+                // Output from javac/jar are always newline terminated.
+                return Optional.of(compileOutput + jarOutput);
+            }
+        }
+
+        void addJarOutput(String jarOutput) {
+            this.jarOutput = jarOutput.isBlank() ? null : jarOutput;
+        }
+    }
+
+    /**
+     *  Make modular JAR according to options and return non-fatal diagnostics on success (notes, warnings, help text).
+     *
+     * @throws ModuleCompilerException on failure
+     */
+    public SuccessResult make(Options options) throws ModuleCompilerException {
+        try {
+            options.validate();
+
+            String moduleName = getModuleName(options.sourceDirectory.resolve("module-info.java"));
+            var classesPath = options.buildDirectory.resolve("classes");
+
+            SuccessResult result = runJavaCompiler(options, moduleName, classesPath);
+
+            return runJarTool(options, moduleName, classesPath, result);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -144,7 +189,7 @@ public class ModuleCompiler {
         }
     }
 
-    private int runJavaCompiler(Options options, String moduleName, Path classesPath) throws IOException {
+    private SuccessResult runJavaCompiler(Options options, String moduleName, Path classesPath) throws IOException {
         var javacDestPath = options.buildDirectory.resolve("javac-classes");
         var moduleSourcePath = options.buildDirectory.resolve("javac-src");
 
@@ -170,14 +215,21 @@ public class ModuleCompiler {
         javacArgs.addAll(options.javacArgs);
 
         if (options.dryRun) {
-            System.out.println("javac " + String.join(" ", javacArgs));
-            return 0;
+            return new SuccessResult("javac " + String.join(" ", javacArgs) + "\n");
+        }
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(new byte[0]);
+        int code = javaCompiler.run(inputStream, outputStream, outputStream, javacArgs.toArray(String[]::new));
+
+        if (code == 0) {
+            return new SuccessResult(outputStream.toString());
         } else {
-            return javaCompiler.run(System.in, System.out, System.out, javacArgs.toArray(String[]::new));
+            throw new ModuleCompilerException(outputStream.toString());
         }
     }
 
-    private int runJarTool(Options options, String moduleName, Path classesPath) {
+    private SuccessResult runJarTool(Options options, String moduleName, Path classesPath, SuccessResult result) {
         var jarArgs = new ArrayList<String>();
         jarArgs.add("-c");
 
@@ -215,10 +267,19 @@ public class ModuleCompiler {
         }
 
         if (options.dryRun) {
-            System.out.println("jar " + String.join(" ", jarArgs));
-            return 0;
+            result.addJarOutput("jar " + String.join(" ", jarArgs) + '\n');
+            return result;
+        }
+
+        StringWriter outputStringWriter = new StringWriter();
+        PrintWriter outputPrintWriter = new PrintWriter(outputStringWriter);
+        int code = jarTool.run(outputPrintWriter, outputPrintWriter, jarArgs.toArray(String[]::new));
+
+        if (code == 0) {
+            result.addJarOutput(outputStringWriter.toString());
+            return result;
         } else {
-            return jarTool.run(System.out, System.out, jarArgs.toArray(String[]::new));
+            throw new ModuleCompilerException(outputStringWriter.toString());
         }
     }
 
@@ -241,7 +302,8 @@ public class ModuleCompiler {
 
     public static void main(String... args) throws IOException {
         try {
-            noExitMain(args);
+            SuccessResult result = mainApi(args);
+            result.diagnostics().ifPresent(System.out::print);
             System.exit(0);
         } catch (ModuleCompilerException e) {
             // We use System.out also for compiler errors, so use out here too.
@@ -254,14 +316,19 @@ public class ModuleCompiler {
         }
     }
 
-    public static void noExitMain(String... args) throws ModuleCompilerException, IOException {
+    public static SuccessResult mainApi(String... args) throws ModuleCompilerException {
         ModuleCompiler moduleCompiler = ModuleCompiler.create();
         Options options = parseProgramArguments(FileSystems.getDefault(), args);
-        moduleCompiler.make(options);
+
+        if (options.help) {
+            return new SuccessResult(getHelpText());
+        }
+
+        return moduleCompiler.make(options);
     }
 
-    private static void help() {
-        throw new ModuleCompilerException("Usage: modulec [OPTION...] SRC [-- JAVACARG...]\n" +
+    static String getHelpText() {
+        return  "Usage: modulec [OPTION...] SRC [-- JAVACARG...]\n" +
                 "Create a modular JAR file from module source in SRC.\n" +
                 "\n" +
                 "Options:\n" +
@@ -272,10 +339,11 @@ public class ModuleCompiler {
                 "                          with '.' the main class will be MODULE.CLASS.\n" +
                 "  -f,--file JARPATH       Write JAR file to JARPATH instead of the default\n" +
                 "                          TARGET/MODULE[-VERSION].jar.\n" +
-             // "  -n,--dry-run            Print javac and jar equivalents instead of execution.\n" +
                 "  -m,--manifest MANIFEST  Include the manifest information from MANIFEST file.\n" +
+                "  -n,--dry-run            Print javac and jar equivalents without execution.\n" +
                 "  -p,--module-path MPATH  The colon-separated module path used for compilation.\n" +
-                "  -v,--version VERSION    The module version.");
+                "  -v,--version VERSION    The module version.\n";
+
     }
 
     static Options parseProgramArguments(FileSystem fileSystem, String... args) {
@@ -294,8 +362,9 @@ public class ModuleCompiler {
                 options.setMainClass(args[++i]);
             } else if (isOptionWithArgument(args, i, "-f", "--file")) {
                 options.setJarPath(fileSystem.getPath(args[++i]));
-            } else if (isOption(args, i, "-h", "-help")) {
-                help();
+            } else if (isOption(args, i, "-h", "--help")) {
+                options.setHelp(true);
+                return options; // short-circuit parsing
             } else if (isOptionWithArgument(args, i, "-m", "--manifest")) {
                 options.setManifestPath(fileSystem.getPath(args[++i]));
             } else if (isOption(args, i, "-n", "--dry-run")) {
