@@ -74,7 +74,7 @@ public class ModuleCompiler {
         Path jarPath = null;
         String mainClass = null;
         Path manifest = null;
-        String modulePath = null;
+        String path = null;
         ModuleDescriptor.Version version = null;
         Path sourceDirectory = null;
         boolean help = false;
@@ -86,7 +86,7 @@ public class ModuleCompiler {
         public Options setJarPath(Path path) { this.jarPath = path; return this; }
         public Options setMainClass(String mainClass) { this.mainClass = mainClass; return this; }
         public Options setManifestPath(Path path) { this.manifest = path; return this; }
-        public Options setModulePath(String modulePath) { this.modulePath = modulePath; return this; }
+        public Options setPath(String modulePath) { this.path = modulePath; return this; }
         public Options setSourceDirectory(Path path) { this.sourceDirectory = path; return this; }
         public Options setVersion(ModuleDescriptor.Version version) { this.version = version; return this; }
         public Options addResourceDirectories(Path... paths) { Collections.addAll(resourceDirectories, paths); return this; }
@@ -104,6 +104,8 @@ public class ModuleCompiler {
 
             if (sourceDirectory == null) {
                 throw new ModuleCompilerException("error: no source directory");
+            } else if (!Files.exists(sourceDirectory)) {
+                throw new ModuleCompilerException("error: source directory does not exist");
             } else if (!Files.exists(sourceDirectory.resolve("module-info.java"))) {
                 throw new ModuleCompilerException("error: no module-info.java in source directory");
             }
@@ -198,9 +200,9 @@ public class ModuleCompiler {
         ensureSymlinkTo(options, moduleSourcePath.resolve(moduleName), options.sourceDirectory.toAbsolutePath().toString());
 
         var javacArgs = new ArrayList<String>();
-        if (options.modulePath != null) {
+        if (options.path != null) {
             javacArgs.add("-p");
-            javacArgs.add(options.modulePath);
+            javacArgs.add(options.path);
         }
         javacArgs.add("--module-source-path");
         javacArgs.add(moduleSourcePath.toString());
@@ -333,15 +335,15 @@ public class ModuleCompiler {
                 "\n" +
                 "Options:\n" +
                 "  [-C RSRC]...            Include each resource directory RSRC.\n" +
-                "  -d,--dry-run            Print javac and jar equivalents without execution.\n" +
                 "  -e,--main-class CLASS   Specify the qualified main class.  If CLASS starts\n" +
                 "                          with '.' the main class will be MODULE.CLASS.\n" +
                 "  -f,--file JARPATH       Write JAR file to JARPATH instead of the default\n" +
                 "                          TARGET/MODULE[-VERSION].jar.\n" +
                 "  -m,--manifest MANIFEST  Include the manifest information from MANIFEST file.\n" +
+                "  -n,--dry-run            Print javac and jar equivalents without execution.\n" +
                 "  -o,--output OUTDIR      Output directory for generated files like class files\n" +
                 "                          and the JAR file, by default target.\n" +
-                "  -p,--module-path MPATH  The colon-separated module path used for compilation.\n" +
+                "  -p,--path MODULEPATH    The colon-separated module path used for compilation.\n" +
                 "  -v,--version VERSION    The module version.\n";
 
     }
@@ -365,12 +367,12 @@ public class ModuleCompiler {
                 return options; // short-circuit parsing
             } else if (isOptionWithArgument(args, i, "-m", "--manifest")) {
                 options.setManifestPath(fileSystem.getPath(args[++i]));
-            } else if (isOption(args, i, "-d", "--dry-run")) {
+            } else if (isOption(args, i, "-n", "--dry-run")) {
                 options.setDryRun(true);
             } else if (isOptionWithArgument(args, i, "-o", "--output")) {
                 options.setOutputDirectory(fileSystem.getPath(args[++i]));
-            } else if (isOptionWithArgument(args, i, "-p", "--module-path")) {
-                options.setModulePath(args[++i]);
+            } else if (isOptionWithArgument(args, i, "-p", "--path")) {
+                options.setPath(args[++i]);
             } else if (isOptionWithArgument(args, i, "-v", "--version")) {
                 ModuleDescriptor.Version version;
                 try {

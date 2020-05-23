@@ -3,13 +3,13 @@ Create a modular JAR file from module source in SRC.
 
 Options:
   [-C RSRC]...            Include each resource directory RSRC.
-  -d,--dry-run            Print javac and jar equivalents without execution.
   -e,--main-class CLASS   Specify the qualified main class.  If CLASS starts
                           with '.' the main class will be MODULE.CLASS.
   -f,--file JARPATH       Write JAR file to JARPATH instead of the default
                           TARGET/MODULE[-VERSION].jar.
   -m,--manifest MANIFEST  Include the manifest information from MANIFEST file.
+  -n,--dry-run            Print javac and jar equivalents without execution.
   -o,--output OUTDIR      Output directory for generated files like class files
                           and the JAR file, by default target.
-  -p,--module-path MPATH  The colon-separated module path used for compilation.
+  -p,--path MODULEPATH    The colon-separated module path used for compilation.
   -v,--version VERSION    The module version.
