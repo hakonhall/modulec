@@ -25,7 +25,7 @@ class BasicTest {
             "--output", basicPath.resolve("target").toString(),
             "--version", "1.2.3",
             "--main-class", "no.ion.tst1.Exported",
-            "--module-path", ".",
+            "--path", ".",
             "--manifest", basicPath.resolve("manifest.mf").toString(),
             basicPath.resolve("src").toString()
     };
@@ -91,7 +91,7 @@ class BasicTest {
                 .setOutputDirectory(basicPath.resolve("target"))
                 .setVersion(ModuleDescriptor.Version.parse("1.2.3"))
                 .setMainClass("no.ion.tst1.Exported")
-                .setModulePath(".")
+                .setPath(".")
                 .setManifestPath(basicPath.resolve("manifest.mf"))
                 .setSourceDirectory(basicPath.resolve("src"));
 

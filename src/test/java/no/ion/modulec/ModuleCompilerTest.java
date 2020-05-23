@@ -100,7 +100,7 @@ class ModuleCompilerTest {
                 .setJarPath(jarPath)
                 .setMainClass("no.ion.modulec.test.Main")
                 .setManifestPath(manifestPath)
-                .setModulePath("a:b")
+                .setPath("a:b")
                 .setSourceDirectory(sourcePath)
                 .setVersion(version);
 
