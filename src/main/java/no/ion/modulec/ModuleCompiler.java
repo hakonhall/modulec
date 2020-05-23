@@ -333,12 +333,12 @@ public class ModuleCompiler {
                 "\n" +
                 "Options:\n" +
                 "  [-C RSRC]...            Include each resource directory RSRC.\n" +
+                "  -d,--dry-run            Print javac and jar equivalents without execution.\n" +
                 "  -e,--main-class CLASS   Specify the qualified main class.  If CLASS starts\n" +
                 "                          with '.' the main class will be MODULE.CLASS.\n" +
                 "  -f,--file JARPATH       Write JAR file to JARPATH instead of the default\n" +
                 "                          TARGET/MODULE[-VERSION].jar.\n" +
                 "  -m,--manifest MANIFEST  Include the manifest information from MANIFEST file.\n" +
-                "  -n,--dry-run            Print javac and jar equivalents without execution.\n" +
                 "  -o,--output OUTDIR      Output directory for generated files like class files\n" +
                 "                          and the JAR file, by default target.\n" +
                 "  -p,--module-path MPATH  The colon-separated module path used for compilation.\n" +
@@ -365,7 +365,7 @@ public class ModuleCompiler {
                 return options; // short-circuit parsing
             } else if (isOptionWithArgument(args, i, "-m", "--manifest")) {
                 options.setManifestPath(fileSystem.getPath(args[++i]));
-            } else if (isOption(args, i, "-n", "--dry-run")) {
+            } else if (isOption(args, i, "-d", "--dry-run")) {
                 options.setDryRun(true);
             } else if (isOptionWithArgument(args, i, "-o", "--output")) {
                 options.setOutputDirectory(fileSystem.getPath(args[++i]));
