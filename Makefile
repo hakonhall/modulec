@@ -1,6 +1,6 @@
 .PHONY: all install clean
 
-all: bin/modulec-shebang target/mvn.ts
+all: bin/modulec-shebang target/mvn.ts install
 
 # Used as a proxy for a mvn run
 target/mvn.ts: Makefile \
@@ -30,12 +30,11 @@ bin/modulec-shebang: src/main/java/no/ion/modulec/ModuleCompiler.java
 install: ~/bin ~/bin/modulec
 
 ~/bin:
-	mkdir ~/bin
+	@echo "Warning: Create ~/bin to install modulec there"
 
 ~/bin/modulec:
 	ln -s $(PWD)/bin/modulec-wrapper.sh ~/bin/modulec
 
 clean:
 	rm -f ~/bin/modulec
-	rm -f bin/modulec-shebang
 	mvn -nsu clean
