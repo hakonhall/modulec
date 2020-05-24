@@ -1,4 +1,4 @@
-.PHONY: all install clean
+.PHONY: all install clean newall newclean
 
 all: bin/modulec-shebang target/mvn.ts install
 
@@ -38,3 +38,32 @@ install: ~/bin ~/bin/modulec
 clean:
 	rm -f ~/bin/modulec
 	mvn -nsu clean
+
+
+TEST_DEPS := lib/junit-platform-console-standalone-1.6.2.jar:lib/jimfs-1.1.jar:lib/guava-18.0.jar
+
+newall: bin/modulec-shebang target/junit.ts install
+
+target/junit.ts: target/no.ion.modulec-1.0.0.jar \
+                 target/test-classes \
+                 lib/junit-platform-console-standalone-1.6.2.jar \
+		 lib/jimfs-1.1.jar \
+		 lib/guava-18.0.jar
+	java -jar lib/junit-platform-console-standalone-1.6.2.jar --disable-banner -E junit-vintage --fail-if-no-tests -cp target/no.ion.modulec-1.0.0.jar -cp target/test-classes -cp lib/jimfs-1.1.jar -cp lib/guava-18.0.jar --scan-class-path target/test-classes
+	touch $@
+
+target/no.ion.modulec-1.0.0.jar: Makefile \
+                 pom.xml \
+                 src/main/java/module-info.java \
+                 src/main/java/no/ion/modulec/ModuleCompiler.java
+	bin/modulec.sh -v 1.0.0 src/main/java
+
+target/test-classes: FILES := \
+    src/test/java/no/ion/modulec/ModuleCompilerTest.java \
+    src/test/java/no/ion/modulec/BasicTest.java
+target/test-classes: target/no.ion.modulec-1.0.0.jar $(FILES)
+	javac -d "$@" -cp $<:$(TEST_DEPS) $(FILES)
+
+newclean:
+	rm -f ~/bin/modulec
+	rm -rf target
