@@ -102,11 +102,7 @@ function Main {
                 ;;
             -v|--version)
                 module_version+=(--module-version "$2")
-                shift 2
-                ;;
-            -*)
                 version_suffix="-$2"
-                module_version=(--module-version "$2")
                 shift 2
                 ;;
             -*)
@@ -156,7 +152,7 @@ function Main {
     type jar &> /dev/null || Fail "'jar' is not installed"
     type realpath &> /dev/null || Fail "'realpath' is not installed"
 
-    mkdir -p "$outdir"
+    mkdir -p "$outdir"/classes
     mkdir -p "$outdir"/javac-classes
     rm -f "$outdir"/javac-classes/"$name"
     ln -s ../classes "$outdir"/javac-classes/"$name"
