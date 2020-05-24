@@ -4,6 +4,7 @@ import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
 import no.ion.modulec.ModuleCompiler.ModuleCompilerException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
 
 import javax.lang.model.SourceVersion;
 import javax.tools.DiagnosticListener;
@@ -31,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT;
 
+@Execution(CONCURRENT)
 class ModuleCompilerTest {
     private final FileSystem fileSystem = Jimfs.newFileSystem(Configuration.unix());
     private final ModuleCompiler moduleCompiler = ModuleCompiler.create();
