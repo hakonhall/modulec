@@ -6,36 +6,17 @@ import no.ion.modulec.ModuleCompiler.ModuleCompilerException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 
-import javax.annotation.processing.Processor;
-import javax.lang.model.SourceVersion;
-import javax.tools.DiagnosticListener;
-import javax.tools.FileObject;
 import javax.tools.JavaCompiler;
-import javax.tools.JavaFileManager;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardJavaFileManager;
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.io.Writer;
 import java.lang.module.ModuleDescriptor;
-import java.nio.charset.Charset;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 import java.util.spi.ToolProvider;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 import static java.util.stream.Collectors.toList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,19 +28,6 @@ import static org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT;
 @Execution(CONCURRENT)
 class ModuleCompilerTest {
     private final FileSystem fileSystem = Jimfs.newFileSystem(Configuration.unix());
-    private final ModuleCompiler moduleCompiler = ModuleCompiler.create();
-
-    @Test
-    void verifyModuleName() throws IOException {
-        moduleCompiler.getModuleName(Path.of("src/test/resources/module-info-valid.java"));
-
-        try {
-            moduleCompiler.getModuleName(Path.of("src/test/resources/module-info-invalid.java"));
-            fail();
-        } catch (ModuleCompilerException e) {
-            assertEquals("error: invalid module declaration in src/test/resources/module-info-invalid.java", e.getMessage());
-        }
-    }
 
     @Test
     void verifyOptionParsing() {
@@ -177,7 +145,7 @@ class ModuleCompilerTest {
         public void setModuleName(String moduleName) { this.moduleName = moduleName; }
 
         @Override
-        final protected String getModuleName(Path moduleInfoPath) throws IOException {
+        final protected String getModuleName(Path moduleInfoPath) {
             return moduleName == null ? super.getModuleName(moduleInfoPath) : moduleName;
         }
 
