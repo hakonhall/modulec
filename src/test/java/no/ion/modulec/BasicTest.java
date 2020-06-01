@@ -30,13 +30,6 @@ class BasicTest {
             basicPath.resolve("src").toString()
     };
 
-    @BeforeEach @AfterEach
-    void setUp() {
-        if (Files.exists(targetPath)) {
-            deleteRecursively(targetPath.toFile());
-        }
-    }
-
     @Test
     void verifyCommandLineArgumentParsing() {
         assertInvalidOptions("error: no source directory");
@@ -78,6 +71,10 @@ class BasicTest {
 
     @Test
     void verifyNoExitMain() {
+        if (Files.exists(targetPath)) {
+            deleteRecursively(targetPath.toFile());
+        }
+
         verifyBasicIsBuilt(() -> {
             ModuleCompiler.SuccessResult result = ModuleCompiler.mainApi(argsForBasic);
             Optional<String> diagnostics = result.diagnostics();
@@ -87,6 +84,10 @@ class BasicTest {
 
     @Test
     void verifyMake() {
+        if (Files.exists(targetPath)) {
+            deleteRecursively(targetPath.toFile());
+        }
+
         var options = new ModuleCompiler.Options()
                 .setOutputDirectory(basicPath.resolve("target"))
                 .setVersion(ModuleDescriptor.Version.parse("1.2.3"))
@@ -111,10 +112,6 @@ class BasicTest {
         assertDirectory("target/classes");
         assertRegularFile("target/classes/module-info.class");
         assertRegularFile("target/classes/no/ion/tst1/Exported.class");
-        assertDirectory("target/javac-classes");
-        assertSymlink("target/javac-classes/no.ion.tst");
-        assertDirectory("target/javac-src");
-        assertSymlink("target/javac-src/no.ion.tst");
         assertRegularFile("target/no.ion.tst-1.2.3.jar");
     }
 
@@ -128,10 +125,6 @@ class BasicTest {
 
     private void assertRegularFile(String pathRelativeBasic) {
         assertTrue(Files.isRegularFile(basicPath.resolve(pathRelativeBasic)));
-    }
-
-    private void assertSymlink(String pathRelativeBasic) {
-        assertTrue(Files.isSymbolicLink(basicPath.resolve(pathRelativeBasic)));
     }
 
     private void deleteRecursively(File existingFile) {
