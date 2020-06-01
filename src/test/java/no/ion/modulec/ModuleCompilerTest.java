@@ -6,12 +6,15 @@ import no.ion.modulec.ModuleCompiler.ModuleCompilerException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 
+import javax.annotation.processing.Processor;
 import javax.lang.model.SourceVersion;
 import javax.tools.DiagnosticListener;
+import javax.tools.FileObject;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileManager;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -22,12 +25,19 @@ import java.nio.charset.Charset;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.spi.ToolProvider;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
+import static java.util.stream.Collectors.toList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -87,6 +97,8 @@ class ModuleCompilerTest {
     void verifyJavacAndJarArguments() throws IOException {
         Path root = fileSystem.getPath("/project");
         Path sourcePath = root.resolve("src");
+        Path javaSourcePath1 = sourcePath.resolve("no/Foo.java");
+        Path javaSourcePath2 = sourcePath.resolve("no/Bar.java");
         Path moduleInfoPath = sourcePath.resolve("module-info.java");
         Path outputDirectory = root.resolve("target");
         ModuleDescriptor.Version version = ModuleDescriptor.Version.parse("1.2.3");
@@ -107,7 +119,9 @@ class ModuleCompilerTest {
                 .setSourceDirectory(sourcePath)
                 .setVersion(version);
 
-        Files.createDirectories(moduleInfoPath.getParent());
+        Files.createDirectories(javaSourcePath1.getParent());
+        Files.writeString(javaSourcePath1, "");
+        Files.writeString(javaSourcePath2, "");
         Files.writeString(moduleInfoPath, "");
         Files.createDirectory(resourceDirectory1);
         Files.createDirectory(resourceDirectory2);
@@ -115,17 +129,16 @@ class ModuleCompilerTest {
 
         options.validate();
 
-        var javaCompiler = new MockJavaCompiler();
         var jarTool = new MockJarTool();
-        var mockedModuleCompiler = new MockModuleCompiler(javaCompiler, jarTool, "no.ion.modulec.test");
-
-        javaCompiler.expectRun(0,
-                "-p", "a:b",
-                "--module-source-path", "/project/target/javac-src",
-                "-m", "no.ion.modulec.test",
-                "--module-version", "1.2.3",
-                "-d", "/project/target/javac-classes",
-                "javacarg1", "javacarg2");
+        var mockedModuleCompiler = new MockModuleCompiler(null, jarTool);
+        mockedModuleCompiler.setModuleName("no.ion.modulec.test");
+        mockedModuleCompiler.expectCompile(
+                List.of("-p", "a:b",
+                        "--module-version", "1.2.3",
+                        "-d", "/project/target/classes",
+                        "javacarg1", "javacarg2"),
+                List.of(moduleInfoPath, javaSourcePath1, javaSourcePath2),
+                () -> new ModuleCompiler.SuccessResult(""));
 
         jarTool.expectRun(0,
                 "-c",
@@ -145,8 +158,8 @@ class ModuleCompilerTest {
         Optional<String> dryRunDiagnostics = dryRunResult.diagnostics();
         assertTrue(dryRunDiagnostics.isPresent());
         assertEquals(
-                "javac -p a:b --module-source-path /project/target/javac-src -m no.ion.modulec.test " +
-                        "--module-version 1.2.3 -d /project/target/javac-classes javacarg1 javacarg2\n" +
+                "javac -p a:b --module-version 1.2.3 -d /project/target/classes javacarg1 javacarg2 " +
+                        "/project/src/module-info.java /project/src/no/Bar.java /project/src/no/Foo.java\n" +
                 "jar -c -f /project/foo.jar -m /project/manifest.mf -e no.ion.modulec.test.Main " +
                         "-C /project/target/classes . -C /project/rsrc1 . -C /project/rsrc2 .\n",
                 dryRunDiagnostics.get());
@@ -154,54 +167,41 @@ class ModuleCompilerTest {
     }
 
     private static class MockModuleCompiler extends ModuleCompiler {
-        private final String moduleName;
+        private String moduleName = null;
+        private List<String> expectedJavacOptions = null;
+        private List<Path> expectedJavacSourceFiles = null;
+        private Supplier<SuccessResult> resultSupplier = null;
 
-        MockModuleCompiler(JavaCompiler javaCompiler, ToolProvider jarTool, String moduleName) {
-            super(javaCompiler, jarTool);
-            this.moduleName = moduleName;
+        MockModuleCompiler(JavaCompiler javaCompiler, ToolProvider jarTool) { super(javaCompiler, jarTool); }
+
+        public void setModuleName(String moduleName) { this.moduleName = moduleName; }
+
+        @Override
+        final protected String getModuleName(Path moduleInfoPath) throws IOException {
+            return moduleName == null ? super.getModuleName(moduleInfoPath) : moduleName;
+        }
+
+        public void expectCompile(List<String> expectedJavacOptions,
+                                  List<Path> expectedJavacSourceFiles,
+                                  Supplier<SuccessResult> resultSupplier) {
+            this.expectedJavacOptions = expectedJavacOptions;
+            this.expectedJavacSourceFiles = expectedJavacSourceFiles;
+            this.resultSupplier = resultSupplier;
         }
 
         @Override
-        String getModuleName(Path moduleInfoPath) throws IOException {
-            return moduleName;
-        }
-    }
+        protected SuccessResult compile(List<String> javacOptions, List<Path> javacSourceFiles) throws ModuleCompilerException {
+            if (expectedJavacOptions != null) {
+                assertEquals(expectedJavacOptions, javacOptions);
+            }
 
-    private static class MockJavaCompiler implements JavaCompiler {
-        private int returnValue;
-        private String[] expectedArgs;
+            if (expectedJavacSourceFiles != null) {
+                assertEquals(
+                        expectedJavacSourceFiles.stream().sorted().collect(toList()),
+                        javacSourceFiles.stream().sorted().collect(toList()));
+            }
 
-        public void expectRun(int returnValue, String... expectedArgs) {
-            this.returnValue = returnValue;
-            this.expectedArgs = expectedArgs;
-        }
-
-        @Override
-        public int run(InputStream in, OutputStream out, OutputStream err, String... arguments) {
-            assertEquals(List.of(expectedArgs), List.of(arguments));
-            return returnValue;
-        }
-
-        // rest is unsupported
-
-        @Override
-        public CompilationTask getTask(Writer out, JavaFileManager fileManager, DiagnosticListener<? super JavaFileObject> diagnosticListener, Iterable<String> options, Iterable<String> classes, Iterable<? extends JavaFileObject> compilationUnits) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public StandardJavaFileManager getStandardFileManager(DiagnosticListener<? super JavaFileObject> diagnosticListener, Locale locale, Charset charset) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public int isSupportedOption(String option) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Set<SourceVersion> getSourceVersions() {
-            throw new UnsupportedOperationException();
+            return resultSupplier == null ? super.compile(javacOptions, javacSourceFiles) : resultSupplier.get();
         }
     }
 
@@ -215,14 +215,15 @@ class ModuleCompilerTest {
         }
 
         @Override
-        public String name() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         public int run(PrintWriter out, PrintWriter err, String... args) {
             assertEquals(List.of(expectedArgs), List.of(args));
             return returnValue;
         }
+
+        @Override
+        public String name() {
+            throw new UnsupportedOperationException();
+        }
     }
+
 }
