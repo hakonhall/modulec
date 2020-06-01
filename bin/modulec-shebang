@@ -2,15 +2,7 @@
 
 package no.ion.modulec;
 
-import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.tree.ErroneousTree;
-import com.sun.source.tree.ExpressionTree;
-import com.sun.source.tree.ModuleTree;
-import com.sun.source.tree.Tree;
-import com.sun.source.util.JavacTask;
-
 import javax.tools.Diagnostic;
-import javax.tools.Diagnostic.Kind;
 import javax.tools.DiagnosticListener;
 import javax.tools.FileObject;
 import javax.tools.ForwardingJavaFileManager;
@@ -21,7 +13,10 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
+import java.lang.module.FindException;
 import java.lang.module.ModuleDescriptor;
+import java.lang.module.ModuleFinder;
+import java.lang.module.ModuleReference;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -33,10 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -162,46 +154,29 @@ public class ModuleCompiler {
 
             SuccessResult result = runJavaCompiler(options, classesPath);
 
-            String moduleName = getModuleName(options.sourceDirectory.resolve("module-info.java"));
+            String moduleName = getModuleName(classesPath);
             return runJarTool(options, moduleName, classesPath, result);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    protected String getModuleName(Path moduleInfoPath) throws IOException {
-        List<String> moduleNames = new ArrayList<>();
+    protected String getModuleName(Path classesPath) {
+        var moduleFinder = ModuleFinder.of(classesPath);
 
-        try(StandardJavaFileManager fileManager = javaCompiler.getStandardFileManager(null, null, null)) {
-            Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjects(moduleInfoPath);
-            JavaCompiler.CompilationTask task = javaCompiler.getTask(null, fileManager, null, null, null, compilationUnits);
-            JavacTask javacTask = (JavacTask) task;
-            Iterable<? extends CompilationUnitTree> units = javacTask.parse();
-
-            units.forEach(compilationUnitTree -> {
-                List<? extends Tree> typeDeclarations = compilationUnitTree.getTypeDecls();
-                for (Tree tree : typeDeclarations) {
-                    if (tree instanceof ModuleTree) {
-                        ModuleTree moduleTree = (ModuleTree) tree;
-                        ExpressionTree name = moduleTree.getName();
-                        moduleNames.add(name.toString());
-                    } else if (tree instanceof ErroneousTree) {
-                        ErroneousTree erroneousTree = (ErroneousTree) tree;
-                        if (!erroneousTree.getErrorTrees().isEmpty()) {
-                            throw new ModuleCompilerException("error: invalid module declaration in " + moduleInfoPath);
-                        }
-                    }
-                }
-            });
-        } catch (NoSuchFileException e) {
-            throw new ModuleCompilerException("No module-info.java was found in source directory: " + moduleInfoPath.getParent());
+        Set<ModuleReference> references = moduleFinder.findAll();
+        switch (references.size()) {
+            case 0: throw new FindException("No exploded module found: " + classesPath);
+            case 1: break;
+            default:
+                String referencesString = references.stream()
+                        .map(reference -> reference.descriptor().name())
+                        .collect(Collectors.joining(", "));
+                throw new FindException("Found more than one modules in " + classesPath + ": " + referencesString);
         }
+        ModuleReference reference = references.iterator().next();
 
-        switch (moduleNames.size()) {
-            case 0: throw new ModuleCompilerException("error: no module declaration found in " + moduleInfoPath);
-            case 1: return moduleNames.get(0);
-            default: throw new ModuleCompilerException("error: multiple modules defined in " + moduleInfoPath + ": " + String.join(", ", moduleNames));
-        }
+        return reference.descriptor().name();
     }
 
     private SuccessResult runJavaCompiler(Options options, Path classesPath) throws IOException {
@@ -259,7 +234,8 @@ public class ModuleCompiler {
 
         var fileManager = new ForwardingJavaFileManager<>(standardFileManager) {
             @Override
-            public JavaFileObject getJavaFileForOutput(Location location, String className, JavaFileObject.Kind kind, FileObject sibling)
+            public JavaFileObject getJavaFileForOutput(Location location, String className, JavaFileObject.Kind kind,
+                                                       FileObject sibling)
                     throws IOException {
                 // sibling.getName(): src/module-info.java
                 // className: module-info
@@ -272,7 +248,6 @@ public class ModuleCompiler {
 
         boolean success = task.call();
 
-        // It appears that if there is an error, no warnings are shown. Not sure about NOTE, MANDATORY_WARNING, and OTHER.
         var message = new StringBuilder();
 
         String writtenString = writer.toString();
@@ -292,7 +267,7 @@ public class ModuleCompiler {
                     ++warningCount;
                     break;
                 default:
-                    // nothing
+                    // nothing?
             }
 
             message.append(diagnostic.toString()).append('\n');
