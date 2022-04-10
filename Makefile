@@ -12,7 +12,7 @@ TEST_DEPS := target/no.ion.modulec-1.0.0.jar:lib/junit-platform-console-standalo
 
 default: junit
 
-junit: bin/modulec-shebang target/junit.ts install
+junit: bin/modulec-shebang target/junit.ts
 
 bin/modulec-shebang: src/main/java/no/ion/modulec/ModuleCompiler.java
 	printf "#!/home/hakon/share/jdk-11/bin/java --source 11\n\n" > $@
