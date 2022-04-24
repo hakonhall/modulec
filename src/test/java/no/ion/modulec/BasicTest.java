@@ -1,7 +1,5 @@
 package no.ion.modulec;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -64,7 +62,7 @@ class BasicTest {
             ModuleCompiler.Options options = ModuleCompiler.parseProgramArguments(fileSystem, args);
             options.validate();
             fail();
-        } catch (ModuleCompiler.ModuleCompilerException e) {
+        } catch (ModuleCompilerException e) {
             assertEquals(expectedExceptionMessage, e.getMessage());
         }
     }
