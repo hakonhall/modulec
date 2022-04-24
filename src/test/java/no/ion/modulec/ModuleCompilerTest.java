@@ -2,7 +2,6 @@ package no.ion.modulec;
 
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
-import no.ion.modulec.ModuleCompiler.ModuleCompilerException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 
@@ -48,7 +47,7 @@ class ModuleCompilerTest {
         try {
             ModuleCompiler.isOptionWithArgument(args, 2, "-g");
             fail();
-        } catch (ModuleCompiler.ModuleCompilerException e) {
+        } catch (ModuleCompilerException e) {
             assertEquals("error: -g requires an argument", e.getMessage());
         }
     }

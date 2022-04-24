@@ -1,13 +1,12 @@
 #!/bin/bash
 
-if ! type readlink &> /dev/null
-then
-    echo "Missing dependency: readlink"
+function Fail {
+    echo "$*" >&2
     exit 1
-elif ! type java &> /dev/null
-then
-    echo "Missing dependency: java"
-fi
+}
+
+type readlink &> /dev/null || Fail "Missing dependency: readlink"
+type java &> /dev/null || Fail "Missing dependency: java"
 
 # To launch the Java JVM with the modulec main class, we need to locate it.
 # We'll assume modulec.class is in ../target/classes relative to the directory
@@ -24,8 +23,7 @@ class_path=$(readlink -m "$0/.."/../target/classes)
 
 if ! test -r "$class_path"/no/ion/modulec/ModuleCompiler.class
 then
-    echo "error: modulec file does not exist: $class_path/no/ion/modulec/ModuleCompiler.class"
-    exit 1
+    Fail "error: modulec file does not exist: $class_path/no/ion/modulec/ModuleCompiler.class"
 fi
 
 exec java -cp "$class_path" no.ion.modulec.ModuleCompiler "$@"

@@ -9,6 +9,7 @@ import javax.tools.ForwardingJavaFileManager;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -22,6 +23,7 @@ import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -48,10 +50,6 @@ public class ModuleCompiler {
 
     private final JavaCompiler javaCompiler;
     private final java.util.spi.ToolProvider jarTool;
-
-    public static class ModuleCompilerException extends RuntimeException {
-        public ModuleCompilerException(String message) { super(message); }
-    }
 
     public static ModuleCompiler create() {
         JavaCompiler javaCompiler = javax.tools.ToolProvider.getSystemJavaCompiler();
@@ -201,12 +199,16 @@ public class ModuleCompiler {
             Path directory = directoryQueue.removeFirst();
             try (DirectoryStream<Path> dentryPathStream = Files.newDirectoryStream(directory)) {
                 for (Path path : dentryPathStream) {
-                    if (Files.isDirectory(path)) {
-                        directoryQueue.addLast(path);
-                    } else if (path.getFileName().toString().endsWith(".java")) {
+                    if (path.getFileName().toString().endsWith(".java")) {
                         javacSourceFiles.add(path);
+                    } else {
+                        // Assume path is a directory: if not, NotDirectoryException is thrown which we'll ignore.
+                        // Doing it this way avoids a Files.isDirectory() which anyway is answered by NotDirectoryException.
+                        directoryQueue.addLast(path);
                     }
                 }
+            } catch (NotDirectoryException | FileNotFoundException e) {
+                // ignore
             }
         }
 

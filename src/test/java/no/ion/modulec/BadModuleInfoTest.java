@@ -21,7 +21,7 @@ public class BadModuleInfoTest {
         try {
             compiler.make(options);
             fail();
-        } catch (ModuleCompiler.ModuleCompilerException e) {
+        } catch (ModuleCompilerException e) {
             assertEquals("src/test/resources/bad-module-info/src/module-info.java:2: error: package is empty or does not exist: a.b\n" +
                          "    exports a.b;\n" +
                          "             ^\n" +
