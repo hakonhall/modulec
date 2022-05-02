@@ -1,4 +1,4 @@
-package no.ion.modulec.file.unix;
+package no.ion.modulec.file;
 
 public enum FileType {
     REGULAR_FILE(0100000),
@@ -18,8 +18,9 @@ public enum FileType {
     private static final int S_IFCHR = 0020000;
     private static final int S_IFIFO = 0010000;
 
-    public static FileType fromMode(int mode) {
-        switch (mode & S_IFMT) {
+    /** Returns a file type based on the st_mode field of a stat structure, see stat(2). */
+    public static FileType fromStatusMode(int statusMode) {
+        switch (statusMode & S_IFMT) {
             case S_IFSOCK: return SOCKET;
             case S_IFLNK: return SYMBOLIC_LINK;
             case S_IFREG: return REGULAR_FILE;
@@ -29,14 +30,13 @@ public enum FileType {
             case S_IFIFO: return FIFO;
         }
 
-        throw new IllegalArgumentException("Invalid file status mode: " + mode);
+        throw new IllegalArgumentException("Invalid file status mode: " + statusMode);
     }
 
     private final int mode;
 
-    FileType(int mode) {
-        this.mode = mode;
-    }
+    FileType(int mode) { this.mode = mode; }
 
-    public int toMode() { return mode; }
+    /** Returns the file type part of the status mode, see stat(2). */
+    public int toStatusMode() { return mode; }
 }

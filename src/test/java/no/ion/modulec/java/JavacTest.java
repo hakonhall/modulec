@@ -33,12 +33,12 @@ class JavacTest {
     @BeforeEach
     void setUp() {
         workDir = Pathname.of(tempDir);
-        assertTrue(workDir.readBasicAttributesIfExists(true).isPresent());
+        assertTrue(workDir.readAttributesIfExists(true).isPresent());
     }
 
     @Test
     void compileTrivialModule() {
-        Optional<BasicAttributes> attributes = workDir.readBasicAttributesIfExists(true);
+        Optional<BasicAttributes> attributes = workDir.readAttributesIfExists(true);
         assertTrue(attributes.isPresent());
         assertTrue(attributes.get().isDirectory());
 
@@ -65,7 +65,7 @@ class JavacTest {
         var params = new Javac.Params().addModule(List.of(srcDir.path()), destDir.path());
         Javac.Result result = javac.compile(params);
 
-        Optional<BasicAttributes> moduleInfoClassAttributes = destDir.resolve("module-info.class").readBasicAttributesIfExists(true);
+        Optional<BasicAttributes> moduleInfoClassAttributes = destDir.resolve("module-info.class").readAttributesIfExists(true);
         assertTrue(moduleInfoClassAttributes.isPresent());
         assertTrue(moduleInfoClassAttributes.get().isFile());
 
@@ -87,14 +87,14 @@ class JavacTest {
             assertTrue(result.makeMessage().startsWith("OK\n"), "Bad message: " + result.makeMessage());
             assertEquals(0, result.diagnostics().size());
 
-            assertTrue(workDir.resolve("moduleA/target").readBasicAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false));
-            assertTrue(workDir.resolve("moduleA/target/example/A/internal/Internal.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
-            assertTrue(workDir.resolve("moduleA/target/module-info.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
-            assertTrue(workDir.resolve("moduleA/target/example/A/A.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+            assertTrue(workDir.resolve("moduleA/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false));
+            assertTrue(workDir.resolve("moduleA/target/example/A/internal/Internal.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+            assertTrue(workDir.resolve("moduleA/target/module-info.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+            assertTrue(workDir.resolve("moduleA/target/example/A/A.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
 
-            assertTrue(workDir.resolve("moduleB/target").readBasicAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false), "moduleB/target does not exist");
-            assertTrue(workDir.resolve("moduleB/target/example/B/Main.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
-            assertTrue(workDir.resolve("moduleB/target/module-info.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+            assertTrue(workDir.resolve("moduleB/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false), "moduleB/target does not exist");
+            assertTrue(workDir.resolve("moduleB/target/example/B/Main.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+            assertTrue(workDir.resolve("moduleB/target/module-info.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
 
             int returnCode = java(workDir, "-p", "moduleA/target:moduleB/target", "-m", "example.B/example.B.Main");
             assertEquals(42, returnCode);
@@ -118,25 +118,25 @@ class JavacTest {
                 assertTrue(resultA.makeMessage().startsWith("OK\n"), "Bad message: " + resultA.makeMessage());
                 assertEquals(0, resultA.diagnostics().size());
 
-                assertTrue(workDir.resolve("moduleA/target").readBasicAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false));
-                assertTrue(workDir.resolve("moduleA/target/example/A/internal/Internal.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
-                assertTrue(workDir.resolve("moduleA/target/module-info.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
-                assertTrue(workDir.resolve("moduleA/target/example/A/A.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+                assertTrue(workDir.resolve("moduleA/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false));
+                assertTrue(workDir.resolve("moduleA/target/example/A/internal/Internal.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+                assertTrue(workDir.resolve("moduleA/target/module-info.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+                assertTrue(workDir.resolve("moduleA/target/example/A/A.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
             }
 
             {
                 var paramsB = new Javac.Params()
-                        .addModule(List.of(workDir.resolve("moduleB/src").path()), workDir.resolve("moduleB/target").path());
-                paramsB.mutableModulePath().addExplodedModule(workDir.resolve("moduleA/target").path());
+                        .addModule(List.of(workDir.resolve("moduleB/src").path()), workDir.resolve("moduleB/target").path())
+                        .withModulePath(modulePath -> modulePath.addExplodedModule(workDir.resolve("moduleA/target").path()));
                 Javac.Result resultB = javac.compile(paramsB);
 
                 assertTrue(resultB.success(), "Compilation failed: " + resultB.makeMessage());
                 assertTrue(resultB.makeMessage().startsWith("OK\n"), "Bad message: " + resultB.makeMessage());
                 assertEquals(0, resultB.diagnostics().size());
 
-                assertTrue(workDir.resolve("moduleB/target").readBasicAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false), "moduleB/target does not exist");
-                assertTrue(workDir.resolve("moduleB/target/example/B/Main.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
-                assertTrue(workDir.resolve("moduleB/target/module-info.class").readBasicAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+                assertTrue(workDir.resolve("moduleB/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false), "moduleB/target does not exist");
+                assertTrue(workDir.resolve("moduleB/target/example/B/Main.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
+                assertTrue(workDir.resolve("moduleB/target/module-info.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
             }
 
             int returnCode = java(workDir, "-p", "moduleA/target:moduleB/target", "-m", "example.B/example.B.Main");
@@ -145,6 +145,11 @@ class JavacTest {
             assertEquals(7, workDir.resolve("moduleA/target").deleteRecursively());
             assertEquals(5, workDir.resolve("moduleB/target").deleteRecursively());
         }
+    }
+
+    @Test
+    void errorMessages() {
+
     }
 
     /** Executes java with the given arguments.  Returns the exit code. */
