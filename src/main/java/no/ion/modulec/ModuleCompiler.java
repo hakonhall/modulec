@@ -257,7 +257,7 @@ public class ModuleCompiler {
 
         int errorCount = 0;
         int warningCount = 0;
-        for (var diagnostic : diagnostics) {
+        for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics) {
             switch (diagnostic.getKind()) {
                 case ERROR:
                     ++errorCount;

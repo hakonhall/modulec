@@ -17,7 +17,7 @@ make install
 
 ## Variants and performance of Java compilation and packaging
 
-`modulec` is small enough that it can be used to test the performance characteristics of 3 different launching mechanisms of `javac` and `jar`:
+`modulec` is small enough that it can be used to test the performance characteristics of different launching mechanisms of `javac` and `jar`:
 
 1. Run `javac` and `jar` through a shell script that has the same features as (2) and (3).
 2. Run `~/bin/modulec`: The symlink installed by above installation, that is a symlink to a shell program that executes a Java program that invokes the equivalent `javac` and `jar` commands of (1) through a Java API.
