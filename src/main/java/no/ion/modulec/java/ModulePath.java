@@ -1,7 +1,5 @@
 package no.ion.modulec.java;
 
-import java.io.File;
-import java.nio.file.FileSystem;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,4 +55,7 @@ public class ModulePath {
     public String toColonSeparatedString() {
         return entries.isEmpty() ? "." : entries.stream().map(Entry::pathString).collect(Collectors.joining(":"));
     }
+
+    @Override
+    public String toString() { return toColonSeparatedString(); }
 }

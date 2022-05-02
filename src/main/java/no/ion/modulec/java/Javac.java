@@ -5,7 +5,7 @@ import no.ion.modulec.util.ModuleCompilerException;
 
 import javax.lang.model.SourceVersion;
 import javax.tools.Diagnostic.Kind;
-import javax.tools.DiagnosticListener;
+import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
@@ -24,6 +24,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -46,7 +48,12 @@ public class Javac {
 
         public Params() {}
 
-        public ModulePath mutableModulePath() { return modulePath; }
+        public ModulePath modulePath() { return modulePath; }
+
+        public Params withModulePath(Consumer<ModulePath> callback) {
+            callback.accept(modulePath);
+            return this;
+        }
 
         public Params addOptions(String... options) {
             Collections.addAll(this.options, options);
@@ -56,11 +63,14 @@ public class Javac {
         private record ModuleInfo(List<Path> sourceDirectories, Path destinationDirectory) {}
 
         /**
-         * This corresponds to the module-specific form of --module-source-path, see e.g.
-         * <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html#the-module-source-path-option">The
-         * Module Source Path Option</a>.
+         * Compile the module with the give source directories and write the class files to the destination directory.
+         * There must be exactly one module-info.java in one of the source directories that defines the module.
          */
         public Params addModule(List<Path> sourceDirectories, Path destinationDirectory) {
+            // This corresponds to the module-specific form of --module-source-path, see e.g.
+            // <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html#the-module-source-path-option">The
+            // Module Source Path Option</a>.
+
             Objects.requireNonNull(destinationDirectory, "destinationDirectory cannot be null");
             if (sourceDirectories.isEmpty())
                 throw new IllegalArgumentException("There must be at least one source directory");
@@ -69,8 +79,13 @@ public class Javac {
             return this;
         }
 
-        /** Set the release to compile for, e.g. 17. By default, the latest version of this JDK. */
+        /** Set the release to compile for, e.g. 17. By default, the current feature version of this JDK. */
         public Params setRelease(int release) {
+            try {
+                SourceVersion.valueOf("RELEASE_" + release);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Unknown release: " + release);
+            }
             this.release = release;
             return this;
         }
@@ -108,7 +123,7 @@ public class Javac {
             }
             buffer.append(out);
             buffer.append(success ? "OK\n" : "FAILED\n");
-            buffer.append(String.format("Completed in %.3fs\n", duration.toNanos() / 1000_000.0));
+            buffer.append(String.format("Complete d in %.3fs\n", duration.toNanos() / 1000_000.0));
             return buffer.toString();
         }
     }
@@ -116,45 +131,37 @@ public class Javac {
     public Result compile(Params params) {
         long startNanos = System.nanoTime();
 
-        var diagnostics = new ArrayList<Diagnostic>();
-
-        var listener = new DiagnosticListener<JavaFileObject>() {
-            @Override
-            public void report(javax.tools.Diagnostic<? extends JavaFileObject> diagnostic) {
-                diagnostics.add(new Diagnostic(diagnostic.getKind(),
-                                               diagnostic.getSource(),
-                                               positionOf(diagnostic.getPosition()),
-                                               positionOf(diagnostic.getStartPosition()),
-                                               positionOf(diagnostic.getEndPosition()),
-                                               positionOf(diagnostic.getLineNumber()),
-                                               positionOf(diagnostic.getColumnNumber()),
-                                               diagnostic.getCode(),
-                                               diagnostic.getMessage(params.locale)));
-            }
-        };
-
-        StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(listener, params.locale, params.charset);
-
-        // Java requires -d with --module-source-path or --module, i.e. setLocationFromPaths(CLASS_OUTPUT, ...) is required
-        // when setLocationForModule(MODULE_SOURCE_PATH, ...).  We MUST call setLocationForModule first, as its javadoc says:
-        //   "If the location is a module-oriented or output location, any module-specific associations set up by
-        //    setLocationForModule will be cancelled."
-        // Since all files ought to be written to module-specific destination directories, we'll make a temporary
-        // non-module-specific destination directory for class files, and verify no files were written to the
-        // directory: see below.
-        Pathname temporaryDirectory = Pathname.makeTemporaryDirectory(Javac.class.getName()).directory();
-        final String out;
+        var collector = new DiagnosticCollector<JavaFileObject>();
+        StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, params.locale, params.charset);
+        var writer = new StringWriter();
         final boolean success;
+        Pathname temporaryDirectory = Pathname.makeTemporaryDirectory(Javac.class.getName() + "-").directory();
         try {
+            // 1. For some reason, Java requires setLocationFromPaths(CLASS_OUTPUT, ...) (-d) when
+            //    setLocationForModule(MODULE_SOURCE_PATH, ...) (--module-source-path) is set.  We output non-module
+            //    specific class files to a temporary directory, and verify none files were written.
+            // 2. setLocationFromPaths() must be called before setLocationForModule(), as the former clears the latter.
             uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(temporaryDirectory.path())));
             uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.MODULE_PATH, params.modulePath.toPaths()));
 
+            Set<String> modules = new HashSet<>(params.moduleInfos.size());
             for (var moduleInfo : params.moduleInfos) {
                 String module = findModuleName(moduleInfo.sourceDirectories, params.sourceVersion());
+                if (!modules.add(module))
+                    throw new ModuleCompilerException("Module added twice: " + module);
+
                 uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_SOURCE_PATH, module, moduleInfo.sourceDirectories()));
                 // setLocationForModule fails unless destination directory exists.
                 Pathname.of(moduleInfo.destinationDirectory()).makeDirectories();
                 uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.CLASS_OUTPUT, module, List.of(moduleInfo.destinationDirectory())));
+
+                // This doesn't fail, but it doesn't work either: Module B depends on A.  Module B gets a module path
+                // pointing to the exploded module of A.  Compilation of B fails with "module not found: example.A".
+                // This is likely OK: Use the union of module paths for the compile.
+                //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_PATH, module, moduleInfo.modulePath().toPaths()));
+
+                // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
+                //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
             }
 
             List<Path> allJavaSourcePaths = findAllJavaSourcePaths(params.moduleInfos);
@@ -169,12 +176,8 @@ public class Javac {
                 options.add(Integer.toString(params.release));
             }
 
-            var writer = new StringWriter();
-            JavaCompiler.CompilationTask task = compiler.getTask(writer, standardFileManager, listener, options, null, compilationUnits);
-
+            JavaCompiler.CompilationTask task = compiler.getTask(writer, standardFileManager, collector, options, null, compilationUnits);
             success = task.call();
-
-            out = writer.toString();
         } finally {
             // Since we force all class files to be written to module-specific destination directories, no class
             // files should be written to the non-module-specific destination directory.  As noted above, we
@@ -188,6 +191,22 @@ public class Javac {
             }
         }
 
+        List<Diagnostic> diagnostics = collector
+                .getDiagnostics()
+                .stream()
+                .map(diagnostic -> new Diagnostic(
+                        diagnostic.getKind(),
+                        diagnostic.getSource(),
+                        positionOf(diagnostic.getPosition()),
+                        positionOf(diagnostic.getStartPosition()),
+                        positionOf(diagnostic.getEndPosition()),
+                        positionOf(diagnostic.getLineNumber()),
+                        positionOf(diagnostic.getColumnNumber()),
+                        diagnostic.getCode(),
+                        diagnostic.getMessage(params.locale)))
+                .collect(Collectors.toList());
+
+        String out = writer.toString();
         var duration = Duration.ofNanos(System.nanoTime() - startNanos);
         return new Result(success, duration, diagnostics, out);
     }

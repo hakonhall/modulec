@@ -1,8 +1,5 @@
 package no.ion.modulec.file;
 
-import no.ion.modulec.file.unix.FileStatus;
-import no.ion.modulec.file.unix.FileType;
-
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -12,12 +9,14 @@ import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
+import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermission;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import static no.ion.modulec.util.Exceptions.uncheckIO;
 
@@ -28,23 +27,28 @@ public class Pathname {
     private final Path path;
 
     public static Pathname of(Path path) { return new Pathname(path); }
+    public Pathname(Path path) { this.path = path; }
 
-    private Pathname(Path path) { this.path = path; }
-
-    public Path path() { return path; }
-    public File file() { return path.toFile(); }
-    public String string() { return path.toString(); }
-    @Override public String toString() { return string(); }
-
-    public FileSystem fileSystem() { return path.getFileSystem(); }
-    public String filename() { return path.getFileName().toString(); }
     public Pathname parent() { return Pathname.of(path.getParent()); }
     public Pathname resolve(Pathname other) { return resolve(other.path); }
     public Pathname resolve(Path other) { return of(path.resolve(other)); }
     public Pathname resolve(String other) { return of(path.resolve(other)); }
 
-    public BasicAttributes readBasicAttributes(boolean followLinks) { return BasicAttributes.of(path, followLinks); }
-    public Optional<BasicAttributes> readBasicAttributesIfExists(boolean followLinks) { return BasicAttributes.ofOptional(path, followLinks); }
+    public FileSystem fileSystem() { return path.getFileSystem(); }
+    public String filename() { return path.getFileName().toString(); }
+    public Path path() { return path; }
+    public File file() { return path.toFile(); }
+    public String string() { return path.toString(); }
+    @Override public String toString() { return string(); }
+
+    public boolean exists() { return readAttributesIfExists(false).isPresent(); }
+    public boolean isFile() { return readAttributesIfExists(false).map(BasicAttributes::isFile).orElse(false); }
+    public boolean isDirectory() { return readAttributesIfExists(false).map(BasicAttributes::isDirectory).orElse(false); }
+    public boolean isSymlink() { return readAttributesIfExists(false).map(BasicAttributes::isSymlink).orElse(false); }
+    public boolean isOther() { return readAttributesIfExists(false).map(BasicAttributes::isOther).orElse(false); }
+
+    public BasicAttributes readAttributes(boolean followSymlinks) { return BasicAttributes.of(path, followSymlinks); }
+    public Optional<BasicAttributes> readAttributesIfExists(boolean followSymlinks) { return BasicAttributes.ifExists(path, followSymlinks); }
 
     /** For each entry in this directory, invoke the callback with a Pathname of this.resolve(filename). */
     public Pathname forEachDirectoryEntry(Consumer<Pathname> callback) {
@@ -74,7 +78,7 @@ public class Pathname {
      * <p>The pathname passed to the callback is obtained by resolving this against its relative path.</p>
      */
     public <T> List<T> find(boolean followSymlinks, BasicFilterMap<T> filterMap) {
-        BasicAttributes thisAttributes = readBasicAttributes(followSymlinks);
+        BasicAttributes thisAttributes = readAttributes(followSymlinks);
         if (!thisAttributes.isDirectory())
             return filterMap.apply(this, thisAttributes).map(List::of).orElse(List.of());
 
@@ -86,7 +90,7 @@ public class Pathname {
         while (dirs.size() > 0) {
             dirs.remove(dirs.size() - 1)
                 .forEachDirectoryEntry(entry -> {
-                    BasicAttributes attributes = entry.readBasicAttributes(followSymlinks);
+                    BasicAttributes attributes = entry.readAttributes(followSymlinks);
                     filterMap.apply(entry, attributes).ifPresent(result::add);
                     if (attributes.isDirectory())
                         dirs.add(entry);
@@ -112,7 +116,7 @@ public class Pathname {
 
     /** Delete this file.  If a directory, delete all content recursively first. Return the number of files and directories that were deleted. */
     public int deleteRecursively() {
-        Optional<BasicAttributes> attributes = readBasicAttributesIfExists(false);
+        Optional<BasicAttributes> attributes = readAttributesIfExists(false);
         if (attributes.isEmpty()) return 0;
         if (attributes.get().isDirectory()) {
             final int[] mutableCount = new int[] {0};
@@ -138,6 +142,29 @@ public class Pathname {
         return this;
     }
 
+    public Pathname setLastModified(Instant time) {
+        FileTime fileTime = FileTime.from(time);
+        uncheckIO(() -> Files.setLastModifiedTime(path, fileTime));
+        return this;
+    }
+
+    public boolean setLastModifiedIfExists(Instant time) {
+        return uncheckIO(() -> Files.setLastModifiedTime(path, FileTime.from(time)), NoSuchFileException.class) != null;
+    }
+
+    public Pathname readSymlink() {
+        Path p = uncheckIO(() -> Files.readSymbolicLink(this.path));
+        return Pathname.of(p);
+    }
+
+    /** Create a symlink at this path, pointing to the target. */
+    public Pathname makeSymlinkTo(Pathname target) { return makeSymlinkTo(target.path()); }
+    public Pathname makeSymlinkTo(String target) { return makeSymlinkTo(fileSystem().getPath(target)); }
+    public Pathname makeSymlinkTo(Path target) {
+        uncheckIO(() -> Files.createSymbolicLink(path, target));
+        return this;
+    }
+
     public record TemporaryDirectory(Pathname directory) implements AutoCloseable {
         @Override
         public void close() { directory.deleteRecursively(); }
@@ -147,5 +174,23 @@ public class Pathname {
     public static TemporaryDirectory makeTemporaryDirectory(String prefix) {
         Path path = uncheckIO(() -> Files.createTempDirectory(prefix));
         return new TemporaryDirectory(Pathname.of(path));
+    }
+
+    /** Get the UNIX file status, see stat(2). */
+    public FileStatus readStatus(boolean followSymlinks) { return FileStatus.of(path, followSymlinks); }
+
+    /** Get the UNIX file status, see stat(2). */
+    public Optional<FileStatus> readStatusIfExists(boolean followSymlinks) { return FileStatus.ifExists(path, followSymlinks); }
+
+    /** Change UNIX permissions, see chmod(2). */
+    public Pathname chmod(int mode) {
+        Set<PosixFilePermission> set = FilePermissions.fromMode(mode).asSet();
+        uncheckIO(() -> Files.setPosixFilePermissions(path, set));
+        return this;
+    }
+
+    /** Converts a boolean followSymlinks to an array of LinkOption. */
+    static LinkOption[] toOpenLinks(boolean followSymlink) {
+        return followSymlink ? new LinkOption[0] : new LinkOption[] { LinkOption.NOFOLLOW_LINKS };
     }
 }
