@@ -63,7 +63,7 @@ class PathnameTest {
     @Test
     void recursiveDelete() {
         final Pathname dir;
-        try (var tempDir = Pathname.makeTemporaryDirectoryInTmpdir(PathnameTest.class.getName() + "-", "")) {
+        try (var tempDir = Pathname.defaultTemporaryDirectory().makeTemporaryDirectory(PathnameTest.class.getName() + "-", "")) {
             dir = tempDir.directory();
             dir.resolve("dir/foo")
                .makeParentDirectories()

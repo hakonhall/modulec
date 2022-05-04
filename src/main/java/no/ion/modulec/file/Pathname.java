@@ -38,6 +38,9 @@ public class Pathname {
 
     private final Path path;
 
+    /** Returns the java.io.tmpdir directory in the default file system. */
+    public static Pathname defaultTemporaryDirectory() { return TMPDIR; }
+
     public static Pathname of(Path path) { return new Pathname(path); }
     public Pathname(Path path) { this.path = path; }
 
@@ -126,15 +129,6 @@ public class Pathname {
         return this;
     }
 
-    /**
-     * Creates a new temporary directory in the default temporary directory given by the java.io.tmpdir system property.
-     *
-     * @see #makeTemporaryDirectory(String, String).
-     */
-    public static TemporaryDirectory makeTemporaryDirectoryInTmpdir(String prefix, String suffix) {
-        return TMPDIR.makeTemporaryDirectory(prefix, suffix);
-    }
-
     /** A directory that will be recursively deleted when closed. */
     public record TemporaryDirectory(Pathname directory) implements AutoCloseable {
         @Override
@@ -158,6 +152,15 @@ public class Pathname {
                 continue;
             return new TemporaryDirectory(Pathname.of(path));
         }
+    }
+
+    /**
+     * Creates a new temporary directory in the {@link #defaultTemporaryDirectory() default temporary directory}.
+     *
+     * @see #makeTemporaryDirectory(String, String)
+     */
+    public static TemporaryDirectory makeTmpdir(String prefix, String suffix) {
+        return defaultTemporaryDirectory().makeTemporaryDirectory(prefix, suffix);
     }
 
     /** Delete this file.  If a directory, delete all content recursively first. Return the number of files and directories that were deleted. */
