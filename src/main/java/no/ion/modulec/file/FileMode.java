@@ -1,6 +1,8 @@
 package no.ion.modulec.file;
 
+import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -86,7 +88,7 @@ public class FileMode {
     public int toFilePermissionInt() { return toInt() & Bit.PERM.value; }
 
     /** Returns the permission bits as a set of {@link PosixFilePermission}. */
-    public Set<PosixFilePermission> toPosixFilePermissionSet() {
+    public Set<PosixFilePermission> permissionsAsPosixFilePermissionSet() {
         var permissions = new HashSet<PosixFilePermission>();
         if ((mode & Bit.RUSR.value) != 0) permissions.add(PosixFilePermission.OWNER_READ);
         if ((mode & Bit.WUSR.value) != 0) permissions.add(PosixFilePermission.OWNER_WRITE);
@@ -98,6 +100,11 @@ public class FileMode {
         if ((mode & Bit.WOTH.value) != 0) permissions.add(PosixFilePermission.OTHERS_WRITE);
         if ((mode & Bit.XOTH.value) != 0) permissions.add(PosixFilePermission.OTHERS_EXECUTE);
         return permissions;
+    }
+
+    public FileAttribute<Set<PosixFilePermission>> permissionsAsFileAttribute() {
+        Set<PosixFilePermission> permissions = permissionsAsPosixFilePermissionSet();
+        return PosixFilePermissions.asFileAttribute(permissions);
     }
 
     public boolean readableByOwner() { return (mode & Bit.RUSR.value) != 0; }

@@ -3,24 +3,37 @@ package no.ion.modulec.util;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
+import java.util.Optional;
 
 public class Exceptions {
     @FunctionalInterface public interface ThrowingRunnable<E extends Exception> { void run() throws E; }
     @FunctionalInterface public interface ThrowingSupplier<T, E extends Exception> { T get() throws E; }
 
-    @SafeVarargs
-    public static void uncheckIO(ThrowingRunnable<IOException> runnable, Class<? extends IOException>... ignored) {
-        uncheckIO(() -> { runnable.run(); return null; }, ignored);
+    public static void uncheckIO(ThrowingRunnable<IOException> runnable) {
+        uncheckIO(() -> { runnable.run(); return null; });
     }
 
-    @SafeVarargs
-    public static <T> T uncheckIO(ThrowingSupplier<T, IOException> supplier, Class<? extends IOException>... ignored) {
+    public static <T> T uncheckIO(ThrowingSupplier<T, IOException> supplier) {
         try {
             return supplier.get();
         } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    @SafeVarargs
+    public static void uncheckIOIgnoring(ThrowingRunnable<IOException> runnable, Class<? extends IOException>... ignored) {
+        uncheckIOIgnoring(() -> { runnable.run(); return null; }, ignored);
+    }
+
+    @SafeVarargs
+    public static <T> Optional<T> uncheckIOIgnoring(ThrowingSupplier<T, IOException> supplier, Class<? extends IOException>... ignored) {
+        try {
+            return Optional.ofNullable(supplier.get());
+        } catch (IOException e) {
             for (Class<? extends IOException> ignoredClass : ignored) {
                 if (ignoredClass.isInstance(e)) {
-                    return null;
+                    return Optional.empty();
                 }
             }
 

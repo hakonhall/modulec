@@ -9,6 +9,7 @@ import java.util.Optional;
 
 import static no.ion.modulec.file.Pathname.toOpenLinks;
 import static no.ion.modulec.util.Exceptions.uncheckIO;
+import static no.ion.modulec.util.Exceptions.uncheckIOIgnoring;
 
 public class BasicAttributes {
     private final BasicFileAttributes attributes;
@@ -20,12 +21,9 @@ public class BasicAttributes {
     }
 
     public static Optional<BasicAttributes> ifExists(Path path, boolean followSymlink) {
-        BasicFileAttributes attributes = uncheckIO(() -> Files.readAttributes(
-                path,
-                BasicFileAttributes.class,
-                toOpenLinks(followSymlink)),
-                NoSuchFileException.class);
-        return Optional.ofNullable(attributes).map(BasicAttributes::new);
+        return uncheckIOIgnoring(() -> Files.readAttributes(path, BasicFileAttributes.class, toOpenLinks(followSymlink)),
+                                 NoSuchFileException.class)
+                .map(BasicAttributes::new);
     }
 
     public boolean isFile() { return attributes.isRegularFile(); }

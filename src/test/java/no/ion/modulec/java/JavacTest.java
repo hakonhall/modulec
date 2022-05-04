@@ -75,7 +75,7 @@ class JavacTest {
 
     @Test
     void compileTwoModulesWithMultipleSourceDirectories() {
-        try (var temporaryDirectory = Pathname.defaultTemporaryDirectory().makeTemporaryDirectory(JavacTest.class.getName() + "-", "")) {
+        try (var temporaryDirectory = Pathname.makeTmpdir(JavacTest.class.getName() + "-", "", null)) {
             Pathname workDir = temporaryDirectory.directory();
             makeTwoModulesWithMultiSources(workDir);
 
@@ -106,7 +106,7 @@ class JavacTest {
 
     @Test
     void compileSequentially() {
-        try (var temporaryDirectory = Pathname.defaultTemporaryDirectory().makeTemporaryDirectory(JavacTest.class.getName() + "-", "")) {
+        try (var temporaryDirectory = Pathname.makeTmpdir(JavacTest.class.getName() + "-", "", null)) {
             Pathname workDir = temporaryDirectory.directory();
             makeTwoModulesWithMultiSources(workDir);
 
