@@ -3,17 +3,24 @@ package no.ion.modulec.file;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -24,6 +31,11 @@ import static no.ion.modulec.util.Exceptions.uncheckIO;
  * A class similar to {@link Path} with basic methods from {@link Files}.
  */
 public class Pathname {
+    // java.io.tmpdir is guaranteed to exist.
+    private static final Pathname TMPDIR = Pathname.of(Paths.get(System.getProperty("java.io.tmpdir")));
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final Base64.Encoder BASE64_ENCODER = Base64.getUrlEncoder();
+
     private final Path path;
 
     public static Pathname of(Path path) { return new Pathname(path); }
@@ -114,6 +126,40 @@ public class Pathname {
         return this;
     }
 
+    /**
+     * Creates a new temporary directory in the default temporary directory given by the java.io.tmpdir system property.
+     *
+     * @see #makeTemporaryDirectory(String, String).
+     */
+    public static TemporaryDirectory makeTemporaryDirectoryInTmpdir(String prefix, String suffix) {
+        return TMPDIR.makeTemporaryDirectory(prefix, suffix);
+    }
+
+    /** A directory that will be recursively deleted when closed. */
+    public record TemporaryDirectory(Pathname directory) implements AutoCloseable {
+        @Override
+        public void close() { directory.deleteRecursively(); }
+    }
+
+    /** Creates a new directory with a name containing random base-64 characters that may include '-' and '_'. */
+    public TemporaryDirectory makeTemporaryDirectory(String prefix, String suffix) {
+        Objects.requireNonNull(prefix, "prefix may not be null");
+        Objects.requireNonNull(suffix, "suffix may not be null");
+        while (true) {
+            String name = randomPathSafeName();
+            if (prefix.isEmpty() && name.startsWith("-"))
+                continue;  // Avoid a directory name starting with '-'
+            Path dir = path.resolve(prefix + name + suffix);
+            Set<PosixFilePermission> permissions = FileMode.fromModeInt(0700).toPosixFilePermissionSet();
+            FileAttribute<Set<PosixFilePermission>> attribute = PosixFilePermissions.asFileAttribute(permissions);
+            Path path = uncheckIO(() -> Files.createDirectory(dir, attribute), FileAlreadyExistsException.class);
+            if (path == null)
+                // Try another random name
+                continue;
+            return new TemporaryDirectory(Pathname.of(path));
+        }
+    }
+
     /** Delete this file.  If a directory, delete all content recursively first. Return the number of files and directories that were deleted. */
     public int deleteRecursively() {
         Optional<BasicAttributes> attributes = readAttributesIfExists(false);
@@ -157,23 +203,14 @@ public class Pathname {
         return Pathname.of(p);
     }
 
-    /** Create a symlink at this path, pointing to the target. */
-    public Pathname makeSymlinkTo(Pathname target) { return makeSymlinkTo(target.path()); }
-    public Pathname makeSymlinkTo(String target) { return makeSymlinkTo(fileSystem().getPath(target)); }
-    public Pathname makeSymlinkTo(Path target) {
+    /** Create a symlink at this path with the given content. */
+    public Pathname makeSymlinkContaining(Pathname target) { return makeSymlinkContaining(target.path()); }
+    /** Create a symlink at this path with the given content. */
+    public Pathname makeSymlinkContaining(String target) { return makeSymlinkContaining(fileSystem().getPath(target)); }
+    /** Create a symlink at this path with the given content. */
+    public Pathname makeSymlinkContaining(Path target) {
         uncheckIO(() -> Files.createSymbolicLink(path, target));
         return this;
-    }
-
-    public record TemporaryDirectory(Pathname directory) implements AutoCloseable {
-        @Override
-        public void close() { directory.deleteRecursively(); }
-    }
-
-    /** Create a temporary directory with the given prefix.  May be null. */
-    public static TemporaryDirectory makeTemporaryDirectory(String prefix) {
-        Path path = uncheckIO(() -> Files.createTempDirectory(prefix));
-        return new TemporaryDirectory(Pathname.of(path));
     }
 
     /** Get the UNIX file status, see stat(2). */
@@ -182,15 +219,90 @@ public class Pathname {
     /** Get the UNIX file status, see stat(2). */
     public Optional<FileStatus> readStatusIfExists(boolean followSymlinks) { return FileStatus.ifExists(path, followSymlinks); }
 
-    /** Change UNIX permissions, see chmod(2). */
+    /** @see FileStatus#type(). */
+    public FileType type(boolean followSymlinks) { return readStatus(followSymlinks).type(); }
+
+    /** @see FileStatus#mode(). */
+    public FileMode mode(boolean followSymlinks) { return readStatus(followSymlinks).mode(); }
+
+    /** @see FileStatus#size(). */
+    public long size(boolean followSymlinks) { return readStatus(followSymlinks).size(); }
+
+    /** @see FileStatus#uid(). */
+    public int uid(boolean followSymlinks) { return readStatus(followSymlinks).uid(); }
+
+    /** @see FileStatus#gid(). */
+    public int gid(boolean followSymlinks) { return readStatus(followSymlinks).gid(); }
+
+    /** @see FileStatus#ino(). */
+    public long ino(boolean followSymlinks) { return readStatus(followSymlinks).ino(); }
+
+    /** @see FileStatus#dev(). */
+    public long dev(boolean followSymlinks) { return readStatus(followSymlinks).dev(); }
+
+    /** @see FileStatus#rdev(). */
+    public long rdev(boolean followSymlinks) { return readStatus(followSymlinks).rdev(); }
+
+    /** @see FileStatus#type(). */
+    public Optional<String> user(boolean followSymlinks) { return readStatus(followSymlinks).user(); }
+
+    /** @see FileStatus#type(). */
+    public Optional<String> group(boolean followSymlinks) { return readStatus(followSymlinks).group(); }
+
+    /** Set the UNIX mode of the file, see chmod(2). */
     public Pathname chmod(int mode) {
-        Set<PosixFilePermission> set = FilePermissions.fromMode(mode).asSet();
-        uncheckIO(() -> Files.setPosixFilePermissions(path, set));
+        uncheckIO(() -> Files.setAttribute(path, "unix:mode", mode));
+        return this;
+    }
+
+    /** Sets the UNIX mode of the file, see chmod(2). */
+    public Pathname chmod(FileMode mode) { return chmod(mode.toInt()); }
+
+    /** Set the UNIX user and group owners of the file, see chown(2). */
+    public Pathname chown(int uid, int gid) {
+        // Unfortunately Java invokes either chown(uid, -1) or chown(-1, gid), so this costs double.
+        return chown_uid(uid).chown_gid(gid);
+    }
+
+    /** Set the UNIX user and group owners of the file without following symlinks, see lchown(2). */
+    public Pathname lchown(int uid, int gid) {
+        // Unfortunately Java invokes either chown(uid, -1) or chown(-1, gid), so this costs double.
+        return lchown_uid(uid).lchown_gid(gid);
+    }
+
+    /** Set the user ID owner of the file as-if invoking chown(uid, -1), see chown(2). */
+    public Pathname chown_uid(int uid) {
+        uncheckIO(() -> Files.setAttribute(path, "unix:uid", uid));
+        return this;
+    }
+
+    /** Set the user ID owner of the file as-if invoking lchown(uid, -1), see lchown(2). */
+    public Pathname lchown_uid(int uid) {
+        uncheckIO(() -> Files.setAttribute(path, "unix:uid", uid, LinkOption.NOFOLLOW_LINKS));
+        return this;
+    }
+
+    /** Set the group ID owner of the file as-if invoking chown(-1, gid), see chown(2). */
+    public Pathname chown_gid(int gid) {
+        uncheckIO(() -> Files.setAttribute(path, "unix:gid", gid));
+        return this;
+    }
+
+    /** Set the group ID owner of the file without following symlinks and as-if invoking lchown(-1, gid), see lchown(2). */
+    public Pathname lchown_gid(int gid) {
+        uncheckIO(() -> Files.setAttribute(path, "unix:gid", gid, LinkOption.NOFOLLOW_LINKS));
         return this;
     }
 
     /** Converts a boolean followSymlinks to an array of LinkOption. */
     static LinkOption[] toOpenLinks(boolean followSymlink) {
         return followSymlink ? new LinkOption[0] : new LinkOption[] { LinkOption.NOFOLLOW_LINKS };
+    }
+
+    /** Returns a base-64 encoded string of length 12.  May contain '-' and '_'. */
+    private static String randomPathSafeName() {
+        // Files.createTempDirectory() uses 8 random bytes. Round up to avoid suffix '='.
+        byte[] bytes = RANDOM.generateSeed(9);
+        return BASE64_ENCODER.encodeToString(bytes);
     }
 }

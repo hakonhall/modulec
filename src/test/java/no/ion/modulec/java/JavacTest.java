@@ -75,7 +75,7 @@ class JavacTest {
 
     @Test
     void compileTwoModulesWithMultipleSourceDirectories() {
-        try (var temporaryDirectory = Pathname.makeTemporaryDirectory(JavacTest.class.getName())) {
+        try (var temporaryDirectory = Pathname.makeTemporaryDirectoryInTmpdir(JavacTest.class.getName() + "-", "")) {
             Pathname workDir = temporaryDirectory.directory();
             makeTwoModulesWithMultiSources(workDir);
 
@@ -106,7 +106,7 @@ class JavacTest {
 
     @Test
     void compileSequentially() {
-        try (var temporaryDirectory = Pathname.makeTemporaryDirectory(JavacTest.class.getName())) {
+        try (var temporaryDirectory = Pathname.makeTemporaryDirectoryInTmpdir(JavacTest.class.getName() + "-", "")) {
             Pathname workDir = temporaryDirectory.directory();
             makeTwoModulesWithMultiSources(workDir);
 
@@ -145,11 +145,6 @@ class JavacTest {
             assertEquals(7, workDir.resolve("moduleA/target").deleteRecursively());
             assertEquals(5, workDir.resolve("moduleB/target").deleteRecursively());
         }
-    }
-
-    @Test
-    void errorMessages() {
-
     }
 
     /** Executes java with the given arguments.  Returns the exit code. */
@@ -216,5 +211,56 @@ class JavacTest {
                                    }
                                }
                                """);
+    }
+
+    @Test
+    void errorMessages() {
+        Pathname src = workDir.resolve("src");
+        Pathname classes = workDir.resolve("classes");
+
+        var params = new Javac.Params();
+        Javac.Result result = javac.compile(params);
+        assertEquals("error: no source files", result.makeMessage());
+
+        Pathname moduleInfoJava = src.resolve("module-info.java")
+                .makeParentDirectories()
+                .writeUtf8("""
+                         module a.example {
+                           exports a.example.api;
+                         }
+                         """);
+        params.addModule(List.of(src.path()), classes.path());
+        result = javac.compile(params);
+        String message = result.makeMessage();
+        assertTrue(message.contains("""
+                             src/module-info.java:2: error: package is empty or does not exist: a.example.api
+                               exports a.example.api;
+                                                ^
+                             1 error
+                             """),
+                   "Bad message: " + message);
+
+        /*
+
+        src.resolve("no/ion/modulec/example/Example.java")
+                .makeParentDirectories()
+                .writeUtf8("""
+                         package no.ion.modulec.example;
+                         class Example {
+                         }
+                         """);
+
+
+        var destDir = workDir.resolve("target");
+        var params = new Javac.Params().addModule(List.of(src.path()), destDir.path());
+        Javac.Result result = javac.compile(params);
+
+        Optional<BasicAttributes> moduleInfoClassAttributes = destDir.resolve("module-info.class").readAttributesIfExists(true);
+        assertTrue(moduleInfoClassAttributes.isPresent());
+        assertTrue(moduleInfoClassAttributes.get().isFile());
+
+        String resultString = result.makeMessage();
+        assertTrue(resultString.startsWith("OK\n"), "Bad result: " + resultString);
+        */
     }
 }

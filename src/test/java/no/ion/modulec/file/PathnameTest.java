@@ -47,12 +47,15 @@ class PathnameTest {
         FileStatus status = fooPath.readStatus(true);
         assertEquals(FileType.REGULAR_FILE, status.type());
         assertEquals(0600, status.mode().toInt());
+
+        fooPath.chown_uid(status.uid());
+        fooPath.chown_gid(status.gid());
     }
 
     @Test
     void symlink() {
         Pathname foo = tempDir.resolve("foo");
-        foo.makeSymlinkTo("bar");
+        foo.makeSymlinkContaining("bar");
         Pathname target = foo.readSymlink();
         assertEquals("bar", target.string());
     }
@@ -60,7 +63,7 @@ class PathnameTest {
     @Test
     void recursiveDelete() {
         final Pathname dir;
-        try (var tempDir = Pathname.makeTemporaryDirectory(PathnameTest.class.getName())) {
+        try (var tempDir = Pathname.makeTemporaryDirectoryInTmpdir(PathnameTest.class.getName() + "-", "")) {
             dir = tempDir.directory();
             dir.resolve("dir/foo")
                .makeParentDirectories()

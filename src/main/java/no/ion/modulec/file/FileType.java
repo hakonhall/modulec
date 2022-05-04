@@ -6,7 +6,7 @@ public enum FileType {
     SYMBOLIC_LINK(0120000),
     FIFO(0010000),
     BLOCK_DEVICE(0060000),
-    CHAR_DEVICE(0020000),
+    CHARACTER_DEVICE(0020000),
     SOCKET(0140000);
 
     private static final int S_IFMT = 0170000;
@@ -26,7 +26,7 @@ public enum FileType {
             case S_IFREG: return REGULAR_FILE;
             case S_IFBLK: return BLOCK_DEVICE;
             case S_IFDIR: return DIRECTORY;
-            case S_IFCHR: return CHAR_DEVICE;
+            case S_IFCHR: return CHARACTER_DEVICE;
             case S_IFIFO: return FIFO;
         }
 
@@ -36,6 +36,14 @@ public enum FileType {
     private final int mode;
 
     FileType(int mode) { this.mode = mode; }
+
+    public boolean isRegularFile() { return this == REGULAR_FILE; }
+    public boolean isDirectory() { return this == DIRECTORY; }
+    public boolean isSymbolicLink() { return this == SYMBOLIC_LINK; }
+    public boolean isFifo() { return this == FIFO; }
+    public boolean isSocket() { return this == SOCKET; }
+    public boolean isBlockDevice() { return this == BLOCK_DEVICE; }
+    public boolean isCharacterDevice() { return this == CHARACTER_DEVICE; }
 
     /** Returns the file type part of the status mode, see stat(2). */
     public int toStatusMode() { return mode; }
