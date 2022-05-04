@@ -13,8 +13,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -22,10 +20,10 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import static no.ion.modulec.util.Exceptions.uncheckIO;
+import static no.ion.modulec.util.Exceptions.uncheckIOIgnoring;
 
 /**
  * A class similar to {@link Path} with basic methods from {@link Files}.
@@ -34,6 +32,7 @@ public class Pathname {
     // java.io.tmpdir is guaranteed to exist.
     private static final Pathname TMPDIR = Pathname.of(Paths.get(System.getProperty("java.io.tmpdir")));
     private static final SecureRandom RANDOM = new SecureRandom();
+    /** Base-64 encoding with '-' and '_', and '=' suffix filler. */
     private static final Base64.Encoder BASE64_ENCODER = Base64.getUrlEncoder();
 
     private final Path path;
@@ -135,32 +134,82 @@ public class Pathname {
         public void close() { directory.deleteRecursively(); }
     }
 
-    /** Creates a new directory with a name containing random base-64 characters that may include '-' and '_'. */
-    public TemporaryDirectory makeTemporaryDirectory(String prefix, String suffix) {
+    /**
+     * Creates a new temporary directory in {@code this} directory.
+     *
+     * <p>The directory name will be {@code prefix+rnd+suffix}, where rnd is a random sequence of
+     * letters and digits.</p>
+     *
+     * @param prefix the prefix of the created directory name
+     * @param suffix the suffix of the created directory name
+     * @param mode   the file mode
+     * @return the temporary directory, recursively deleted if {@link TemporaryDirectory#close() closed}
+     */
+    public TemporaryDirectory makeTemporaryDirectory(String prefix, String suffix, FileMode mode) {
         Objects.requireNonNull(prefix, "prefix may not be null");
         Objects.requireNonNull(suffix, "suffix may not be null");
         while (true) {
             String name = randomPathSafeName();
             if (prefix.isEmpty() && name.startsWith("-"))
-                continue;  // Avoid a directory name starting with '-'
-            Path dir = path.resolve(prefix + name + suffix);
-            Set<PosixFilePermission> permissions = FileMode.fromModeInt(0700).toPosixFilePermissionSet();
-            FileAttribute<Set<PosixFilePermission>> attribute = PosixFilePermissions.asFileAttribute(permissions);
-            Path path = uncheckIO(() -> Files.createDirectory(dir, attribute), FileAlreadyExistsException.class);
-            if (path == null)
+                continue;  // Avoid a directory name starting or ending with '-' or '_'.
+            Path tmpdir = path.resolve(prefix + name + suffix);
+            var attributes = mode == null ? new FileAttribute<?>[0] : new FileAttribute<?>[] { mode.permissionsAsFileAttribute() };
+            if (uncheckIOIgnoring(() -> Files.createDirectory(tmpdir, attributes), FileAlreadyExistsException.class).isEmpty())
                 // Try another random name
                 continue;
-            return new TemporaryDirectory(Pathname.of(path));
+            return new TemporaryDirectory(Pathname.of(tmpdir));
         }
     }
 
     /**
      * Creates a new temporary directory in the {@link #defaultTemporaryDirectory() default temporary directory}.
      *
-     * @see #makeTemporaryDirectory(String, String)
+     * @see #makeTemporaryDirectory(String, String, FileMode)
      */
-    public static TemporaryDirectory makeTmpdir(String prefix, String suffix) {
-        return defaultTemporaryDirectory().makeTemporaryDirectory(prefix, suffix);
+    public static TemporaryDirectory makeTmpdir(String prefix, String suffix, FileMode mode) {
+        return defaultTemporaryDirectory().makeTemporaryDirectory(prefix, suffix, mode);
+    }
+
+    /** A file that will be deleted when closed. */
+    public record TemporaryFile(Pathname pathname) implements AutoCloseable {
+        @Override
+        public void close() { pathname.delete(); }
+    }
+
+    /**
+     * Creates a new temporary file assuming {@code this} pathname is an existing directory.
+     *
+     * <p>The filename will be {@code prefix+base64random+suffix}, where base64random is a base-64 encoded
+     * random byte sequence.  base64random may contain '-' and '_' characters, but will not start with a '-'.</p>
+     *
+     * @param prefix prefix of the filename
+     * @param suffix suffix of the filename
+     * @param mode   the mode to create the file with, or null if the default should be used.
+     * @return the pathname of the temporary file, which will be deleted if {@link TemporaryFile#close closed}
+     */
+    public TemporaryFile makeTemporaryFile(String prefix, String suffix, FileMode mode) {
+        Objects.requireNonNull(prefix, "prefix may not be null");
+        Objects.requireNonNull(suffix, "suffix may not be null");
+        while (true) {
+            String name = randomPathSafeName();
+            if (prefix.isEmpty() && name.startsWith("-"))
+                continue;  // Avoid a filename starting with '-'
+            Path file = path.resolve(prefix + name + suffix);
+            var attributes = mode == null ? new FileAttribute<?>[0] : new FileAttribute<?>[] { mode.permissionsAsFileAttribute() };
+                if (uncheckIOIgnoring(() -> Files.createFile(file, attributes), FileAlreadyExistsException.class).isEmpty())
+                    continue;  // Filename clash, try again
+            return new TemporaryFile(Pathname.of(file));
+        }
+    }
+
+    /** @see #makeTemporaryFile(String, String, FileMode) */
+    public static TemporaryFile makeTmpfile(String prefix, String suffix, FileMode mode) {
+        return TMPDIR.makeTemporaryFile(prefix, suffix, mode);
+    }
+
+    /** Returns true if the file or directory was deleted, false if it did not exist. */
+    public boolean delete() {
+        return uncheckIO(() -> Files.deleteIfExists(path));
     }
 
     /** Delete this file.  If a directory, delete all content recursively first. Return the number of files and directories that were deleted. */
@@ -182,7 +231,7 @@ public class Pathname {
     public String readUtf8() { return uncheckIO(() -> Files.readString(path)); }
 
     public Optional<String> readUtf8IfExists() {
-        return Optional.ofNullable(uncheckIO(() -> Files.readString(path), NoSuchFileException.class));
+        return uncheckIOIgnoring(() -> Files.readString(path), NoSuchFileException.class);
     }
 
     /** Writes the string in UTF-8 encoding as the content of the regular file at this pathname. */
@@ -198,7 +247,7 @@ public class Pathname {
     }
 
     public boolean setLastModifiedIfExists(Instant time) {
-        return uncheckIO(() -> Files.setLastModifiedTime(path, FileTime.from(time)), NoSuchFileException.class) != null;
+        return uncheckIOIgnoring(() -> Files.setLastModifiedTime(path, FileTime.from(time)), NoSuchFileException.class) != null;
     }
 
     public Pathname readSymlink() {
@@ -302,10 +351,29 @@ public class Pathname {
         return followSymlink ? new LinkOption[0] : new LinkOption[] { LinkOption.NOFOLLOW_LINKS };
     }
 
-    /** Returns a base-64 encoded string of length 12.  May contain '-' and '_'. */
     private static String randomPathSafeName() {
-        // Files.createTempDirectory() uses 8 random bytes. Round up to avoid suffix '='.
-        byte[] bytes = RANDOM.generateSeed(9);
-        return BASE64_ENCODER.encodeToString(bytes);
+        // Gives 10k billion unique names
+        return randomPathSafeName(8);
+    }
+
+    private static String randomPathSafeName(int length) {
+        if (length <= 0) return "";
+        byte[] bytes = new byte[length];
+        var string = new StringBuilder();
+        do {
+            RANDOM.nextBytes(bytes);
+            for (char c : BASE64_ENCODER.encodeToString(bytes).toCharArray()) {
+                if (isSafeChar(c)) {
+                    string.append(c);
+                    if (string.length() >= length) {
+                        return string.toString();
+                    }
+                }
+            }
+        } while (true);
+    }
+
+    private static boolean isSafeChar(char c) {
+        return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9');
     }
 }

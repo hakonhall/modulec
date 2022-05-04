@@ -200,7 +200,7 @@ public class Javac {
         var writer = new StringWriter();
         boolean success;
         RuntimeException exception = null;
-        Pathname temporaryDirectory = Pathname.defaultTemporaryDirectory().makeTemporaryDirectory(Javac.class.getName() + ".", "").directory();
+        Pathname temporaryDirectory = Pathname.makeTmpdir(Javac.class.getName() + ".", "", null).directory();
         try {
             // 1. For some reason, Java requires setLocationFromPaths(CLASS_OUTPUT, ...) (-d) when
             //    setLocationForModule(MODULE_SOURCE_PATH, ...) (--module-source-path) is set.  We output non-module

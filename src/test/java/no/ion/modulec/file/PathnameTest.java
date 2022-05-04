@@ -63,7 +63,7 @@ class PathnameTest {
     @Test
     void recursiveDelete() {
         final Pathname dir;
-        try (var tempDir = Pathname.defaultTemporaryDirectory().makeTemporaryDirectory(PathnameTest.class.getName() + "-", "")) {
+        try (var tempDir = Pathname.makeTmpdir(PathnameTest.class.getName() + "-", "", null)) {
             dir = tempDir.directory();
             dir.resolve("dir/foo")
                .makeParentDirectories()
@@ -73,5 +73,17 @@ class PathnameTest {
         }
 
         assertTrue(dir.readAttributesIfExists(true).isEmpty(), "Temporary directory was not deleted: " + dir);
+    }
+
+    @Test
+    void temporaryFile() {
+        final Pathname tmpFileCopy;
+        try (var tmpFile = Pathname.makeTmpfile(PathnameTest.class.getName() + ".", "", FileMode.fromModeInt(0600))) {
+            tmpFileCopy = tmpFile.pathname();
+            assertTrue(tmpFile.pathname().exists());
+            assertEquals(0600, tmpFile.pathname().mode(true).toInt());
+        }
+
+        assertFalse(tmpFileCopy.exists());
     }
 }
