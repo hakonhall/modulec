@@ -106,24 +106,88 @@ public class Javac {
     }
 
     public record Diagnostic(Kind kind,
-                             JavaFileObject source,
+                             Optional<JavaFileObject> source,
                              OptionalLong position,
                              OptionalLong startPosition,
                              OptionalLong endPosition,
                              OptionalLong lineNumber,
                              OptionalLong columnNumber,
-                             String code,
-                             String message) { }
+                             Optional<String> code,
+                             String message) {
+        public Diagnostic {
+            Objects.requireNonNull(kind, "kind cannot be null");
+            Objects.requireNonNull(source, "source cannot be null");
+            Objects.requireNonNull(position, "position cannot be null");
+            Objects.requireNonNull(startPosition, "startPosition cannot be null");
+            Objects.requireNonNull(endPosition, "endPosition cannot be null");
+            Objects.requireNonNull(lineNumber, "lineNumber cannot be null");
+            Objects.requireNonNull(columnNumber, "columnNumber cannot be null");
+            Objects.requireNonNull(code, "code cannot be null");
+            Objects.requireNonNull(message, "message cannot be null");
+        }
+    }
 
-    public record Result(boolean success, Duration duration, List<Diagnostic> diagnostics, String out) {
+    public record Result(boolean success, Duration duration, List<Diagnostic> diagnostics, String out,
+                         RuntimeException exception) {
+        public Result {
+            Objects.requireNonNull(duration, "duration cannot be null");
+            Objects.requireNonNull(duration, "diagnostics cannot be null");
+            Objects.requireNonNull(duration, "out cannot be null");
+        }
+
+        /** Tries to make a message similar to that produced by the javac tool. */
         public String makeMessage() {
-            var buffer = new StringBuilder();
-            for (var diag : diagnostics) {
-                buffer.append(diag.toString()).append('\n');
+            if (exception != null) {
+                return exception.getMessage();
             }
-            buffer.append(out);
+
+            int errors = 0;
+
+            var buffer = new StringBuilder();
+            for (var diagnostic : diagnostics) {
+                if (diagnostic.kind == Kind.ERROR) {
+                    errors += 1;
+                }
+
+                if (diagnostic.source.isPresent()) {
+                    buffer.append(diagnostic.source().get().getName());
+                    diagnostic.lineNumber().ifPresent(lineNumber -> buffer.append(':').append(lineNumber));
+                    buffer.append(": ");
+                    if (diagnostic.kind == Kind.ERROR) {
+                        buffer.append("error: ");
+                    } else if (diagnostic.kind == Kind.WARNING || diagnostic.kind == Kind.MANDATORY_WARNING) {
+                        buffer.append("warning: ");
+                    }
+                    buffer.append(diagnostic.message).append('\n');
+
+                    diagnostic.lineNumber.ifPresent(lineno -> {
+                        CharSequence charSequence = uncheckIO(() -> diagnostic.source().get().getCharContent(true));
+                        if (charSequence != null) {
+                            String content = String.valueOf(charSequence);
+                            String[] lines = content.lines().toArray(String[]::new);
+                            if (lineno - 1 >= 0 && lineno - 1 < lines.length) {
+                                String line = lines[(int) (lineno - 1)];
+                                buffer.append(line).append('\n');
+                                diagnostic.columnNumber.ifPresent(columnNumber -> {
+                                    if (columnNumber > 1)
+                                        buffer.append(" ".repeat((int) (columnNumber - 1)));
+                                    buffer.append("^\n");
+                                });
+                            }
+                        }
+                    });
+                }
+            }
+
+            if (errors > 0) {
+                buffer.append(errors).append(errors == 1 ? " error\n" : " errors\n");
+            }
+
+            if (!out.isEmpty())
+                buffer.append(out);
+
             buffer.append(success ? "OK\n" : "FAILED\n");
-            buffer.append(String.format("Complete d in %.3fs\n", duration.toNanos() / 1000_000.0));
+            buffer.append(String.format("Completed in %.3fs\n", duration.toNanos() / 1000_000.0));
             return buffer.toString();
         }
     }
@@ -134,8 +198,9 @@ public class Javac {
         var collector = new DiagnosticCollector<JavaFileObject>();
         StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, params.locale, params.charset);
         var writer = new StringWriter();
-        final boolean success;
-        Pathname temporaryDirectory = Pathname.makeTemporaryDirectory(Javac.class.getName() + "-").directory();
+        boolean success;
+        RuntimeException exception = null;
+        Pathname temporaryDirectory = Pathname.makeTemporaryDirectoryInTmpdir(Javac.class.getName() + ".", "").directory();
         try {
             // 1. For some reason, Java requires setLocationFromPaths(CLASS_OUTPUT, ...) (-d) when
             //    setLocationForModule(MODULE_SOURCE_PATH, ...) (--module-source-path) is set.  We output non-module
@@ -177,7 +242,13 @@ public class Javac {
             }
 
             JavaCompiler.CompilationTask task = compiler.getTask(writer, standardFileManager, collector, options, null, compilationUnits);
-            success = task.call();
+
+            try {
+                success = task.call();
+            } catch (IllegalStateException e) {
+                success = false;
+                exception = e;
+            }
         } finally {
             // Since we force all class files to be written to module-specific destination directories, no class
             // files should be written to the non-module-specific destination directory.  As noted above, we
@@ -196,19 +267,19 @@ public class Javac {
                 .stream()
                 .map(diagnostic -> new Diagnostic(
                         diagnostic.getKind(),
-                        diagnostic.getSource(),
+                        Optional.ofNullable(diagnostic.getSource()),
                         positionOf(diagnostic.getPosition()),
                         positionOf(diagnostic.getStartPosition()),
                         positionOf(diagnostic.getEndPosition()),
                         positionOf(diagnostic.getLineNumber()),
                         positionOf(diagnostic.getColumnNumber()),
-                        diagnostic.getCode(),
+                        Optional.ofNullable(diagnostic.getCode()),
                         diagnostic.getMessage(params.locale)))
                 .collect(Collectors.toList());
 
         String out = writer.toString();
         var duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new Result(success, duration, diagnostics, out);
+        return new Result(success, duration, diagnostics, out, exception);
     }
 
     private static final Pattern MODULE_PATTERN = Pattern.compile("^ *(open +)?module +([a-zA-Z0-9_.]+)");
