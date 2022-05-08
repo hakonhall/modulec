@@ -64,6 +64,34 @@ public class Pathname {
     public BasicAttributes readAttributes(boolean followSymlinks) { return BasicAttributes.of(path, followSymlinks); }
     public Optional<BasicAttributes> readAttributesIfExists(boolean followSymlinks) { return BasicAttributes.ifExists(path, followSymlinks); }
 
+    public boolean isEmptyDirectory() {
+        Optional<OpenDirectory> directoryOrEmpty = OpenDirectory.openIfDirectory(path);
+        if (directoryOrEmpty.isEmpty())
+            return false;
+
+        try (OpenDirectory directory = directoryOrEmpty.get()) {
+            for (Pathname entry : directory) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public boolean isNonEmptyDirectory() {
+        Optional<OpenDirectory> directoryOrEmpty = OpenDirectory.openIfDirectory(path);
+        if (directoryOrEmpty.isEmpty())
+            return false;
+
+        try (OpenDirectory directory = directoryOrEmpty.get()) {
+            for (Pathname entry : directory) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** For each entry in this directory, invoke the callback with a Pathname of this.resolve(filename). */
     public Pathname forEachDirectoryEntry(Consumer<Pathname> callback) {
         DirectoryStream<Path> directoryStream = uncheckIO(() -> Files.newDirectoryStream(path));
@@ -77,6 +105,8 @@ public class Pathname {
 
         return this;
     }
+
+    public OpenDirectory openDirectory() { return OpenDirectory.open(path); }
 
     @FunctionalInterface
     public interface BasicFilterMap<T> {
@@ -128,12 +158,6 @@ public class Pathname {
         return this;
     }
 
-    /** A directory that will be recursively deleted when closed. */
-    public record TemporaryDirectory(Pathname directory) implements AutoCloseable {
-        @Override
-        public void close() { directory.deleteRecursively(); }
-    }
-
     /**
      * Creates a new temporary directory in {@code this} directory.
      *
@@ -157,7 +181,7 @@ public class Pathname {
             if (uncheckIOIgnoring(() -> Files.createDirectory(tmpdir, attributes), FileAlreadyExistsException.class).isEmpty())
                 // Try another random name
                 continue;
-            return new TemporaryDirectory(Pathname.of(tmpdir));
+            return new StandardTemporaryDirectory(Pathname.of(tmpdir));
         }
     }
 

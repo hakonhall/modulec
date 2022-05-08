@@ -2,12 +2,11 @@ package no.ion.modulec.java;
 
 import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
-import no.ion.modulec.file.TestFileSystem;
+import no.ion.modulec.file.TestDirectory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.FileSystem;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -22,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JavacTest {
-    private final FileSystem fileSystem = TestFileSystem.create();
     private final Javac javac = new Javac();
 
     @TempDir
@@ -63,7 +61,7 @@ class JavacTest {
 
         var destDir = workDir.resolve("target");
         var params = new Javac.Params().addModule(List.of(srcDir.path()), destDir.path());
-        Javac.Result result = javac.compile(params);
+        CompilationResult result = javac.compile(params);
 
         Optional<BasicAttributes> moduleInfoClassAttributes = destDir.resolve("module-info.class").readAttributesIfExists(true);
         assertTrue(moduleInfoClassAttributes.isPresent());
@@ -75,14 +73,13 @@ class JavacTest {
 
     @Test
     void compileTwoModulesWithMultipleSourceDirectories() {
-        try (var temporaryDirectory = Pathname.makeTmpdir(JavacTest.class.getName() + "-", "", null)) {
-            Pathname workDir = temporaryDirectory.directory();
+        TestDirectory.with(JavacTest.class, workDir -> {
             makeTwoModulesWithMultiSources(workDir);
 
             var params = new Javac.Params()
                     .addModule(List.of(workDir.resolve("moduleA/src1").path(), workDir.resolve("moduleA/src2").path()), workDir.resolve("moduleA/target").path())
                     .addModule(List.of(workDir.resolve("moduleB/src").path()), workDir.resolve("moduleB/target").path());
-            Javac.Result result = javac.compile(params);
+            CompilationResult result = javac.compile(params);
             assertTrue(result.success(), "Compilation failed: " + result.makeMessage());
             assertTrue(result.makeMessage().startsWith("OK\n"), "Bad message: " + result.makeMessage());
             assertEquals(0, result.diagnostics().size());
@@ -101,19 +98,18 @@ class JavacTest {
 
             assertEquals(7, workDir.resolve("moduleA/target").deleteRecursively());
             assertEquals(5, workDir.resolve("moduleB/target").deleteRecursively());
-        }
+        });
     }
 
     @Test
     void compileSequentially() {
-        try (var temporaryDirectory = Pathname.makeTmpdir(JavacTest.class.getName() + "-", "", null)) {
-            Pathname workDir = temporaryDirectory.directory();
+        TestDirectory.with(JavacTest.class, workDir -> {
             makeTwoModulesWithMultiSources(workDir);
 
             {
                 var paramsA = new Javac.Params()
                         .addModule(List.of(workDir.resolve("moduleA/src1").path(), workDir.resolve("moduleA/src2").path()), workDir.resolve("moduleA/target").path());
-                Javac.Result resultA = javac.compile(paramsA);
+                CompilationResult resultA = javac.compile(paramsA);
                 assertTrue(resultA.success(), "Compilation failed: " + resultA.makeMessage());
                 assertTrue(resultA.makeMessage().startsWith("OK\n"), "Bad message: " + resultA.makeMessage());
                 assertEquals(0, resultA.diagnostics().size());
@@ -128,7 +124,7 @@ class JavacTest {
                 var paramsB = new Javac.Params()
                         .addModule(List.of(workDir.resolve("moduleB/src").path()), workDir.resolve("moduleB/target").path())
                         .withModulePath(modulePath -> modulePath.addExplodedModule(workDir.resolve("moduleA/target").path()));
-                Javac.Result resultB = javac.compile(paramsB);
+                CompilationResult resultB = javac.compile(paramsB);
 
                 assertTrue(resultB.success(), "Compilation failed: " + resultB.makeMessage());
                 assertTrue(resultB.makeMessage().startsWith("OK\n"), "Bad message: " + resultB.makeMessage());
@@ -144,7 +140,7 @@ class JavacTest {
 
             assertEquals(7, workDir.resolve("moduleA/target").deleteRecursively());
             assertEquals(5, workDir.resolve("moduleB/target").deleteRecursively());
-        }
+        });
     }
 
     /** Executes java with the given arguments.  Returns the exit code. */
@@ -219,7 +215,7 @@ class JavacTest {
         Pathname classes = workDir.resolve("classes");
 
         var params = new Javac.Params();
-        Javac.Result result = javac.compile(params);
+        CompilationResult result = javac.compile(params);
         assertEquals("error: no source files", result.makeMessage());
 
         Pathname moduleInfoJava = src.resolve("module-info.java")
@@ -239,28 +235,5 @@ class JavacTest {
                              1 error
                              """),
                    "Bad message: " + message);
-
-        /*
-
-        src.resolve("no/ion/modulec/example/Example.java")
-                .makeParentDirectories()
-                .writeUtf8("""
-                         package no.ion.modulec.example;
-                         class Example {
-                         }
-                         """);
-
-
-        var destDir = workDir.resolve("target");
-        var params = new Javac.Params().addModule(List.of(src.path()), destDir.path());
-        Javac.Result result = javac.compile(params);
-
-        Optional<BasicAttributes> moduleInfoClassAttributes = destDir.resolve("module-info.class").readAttributesIfExists(true);
-        assertTrue(moduleInfoClassAttributes.isPresent());
-        assertTrue(moduleInfoClassAttributes.get().isFile());
-
-        String resultString = result.makeMessage();
-        assertTrue(resultString.startsWith("OK\n"), "Bad result: " + resultString);
-        */
     }
 }

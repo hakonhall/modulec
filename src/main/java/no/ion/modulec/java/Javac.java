@@ -1,10 +1,11 @@
 package no.ion.modulec.java;
 
+import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
+import no.ion.modulec.file.TemporaryDirectory;
 import no.ion.modulec.util.ModuleCompilerException;
 
 import javax.lang.model.SourceVersion;
-import javax.tools.Diagnostic.Kind;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
@@ -12,8 +13,11 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
 import java.io.StringWriter;
+import java.io.UncheckedIOException;
+import java.lang.module.ModuleDescriptor;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -33,9 +37,197 @@ import java.util.stream.Collectors;
 import static no.ion.modulec.util.Exceptions.uncheckIO;
 
 public class Javac {
+    private static final String OWNER_FILENAME = "owner";
+    private static final String OWNER_MAGIC = "no.ion.modulec";
+
     private final JavaCompiler compiler;
 
     public Javac() { this.compiler = getSystemJavaCompiler(); }
+
+    public CompilationResult compile(MultiModuleCompilationAndPackaging compilation) {
+        long startNanos = System.nanoTime();
+
+        var collector = new DiagnosticCollector<JavaFileObject>();
+        StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, compilation.locale(), compilation.charset());
+        var writer = new StringWriter();
+        boolean success;
+        RuntimeException exception = null;
+
+        try (OutputDirectory outputDirectory = resolveOutputDirectory(compilation.outputDirectory().orElse(null))) {
+            compilation.setOutputDirectory(outputDirectory.directory().path());
+            // For some reason Java requires setLocationFromPaths(CLASS_OUTPUT, ...) (aka -d) is invoked when
+            // setLocationForModule(MODULE_SOURCE_PATH, ...) (aka --module-source-path) is set.  We output non-module-specific
+            // class files to a special classes directory, and verify no files were written by the compiler (see finally).
+            Pathname classOutput = resolveClassDirectory(outputDirectory);
+            try {
+                // These setLocationFromPaths() must be called before setLocationForModule(), as the former clears the latter.
+                // And it must exist.
+                classOutput.makeDirectories();
+                uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(classOutput.path())));
+                uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.MODULE_PATH, compilation.modulePath().toPaths()));
+
+                int nModules = compilation.modules().size();
+                if (nModules == 0)
+                    throw new ModuleCompilerException("No modules specified");
+                var moduleNames = new HashSet<String>(nModules);
+                var sourcePaths = new ArrayList<Path>();
+                for (var module : compilation.modules()) {
+                    List<Path> sourceDirectories = module.sourceDirectories();
+                    if (sourceDirectories.isEmpty())
+                        throw new ModuleCompilerException("No source directories" + module.name().map(n -> " for module " + n).orElse(""));
+
+                    List<Path> moduleSourcePaths = sourceFiles(sourceDirectories);
+                    if (moduleSourcePaths.isEmpty())
+                        throw new ModuleCompilerException("No source files found in " + sourceDirectories);
+
+                    sourcePaths.addAll(moduleSourcePaths);
+
+                    String moduleName = resolveModuleName(module.name().orElse(null), module.sourceDirectories(), compilation.release().sourceVersion());
+                    if (!moduleNames.add(moduleName))
+                        throw new ModuleCompilerException("Module added twice: " + moduleName);
+                    module.setName(moduleName);
+
+                    uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_SOURCE_PATH, moduleName, module.sourceDirectories()));
+
+                    // setLocationForModule fails unless destination directory exists.
+                    Pathname moduleClassesDirectory = resolveModuleClassesDirectory(module.classOutputDirectory(),
+                                                                                    outputDirectory, moduleName);
+                    module.setClassOutputDirectory(moduleClassesDirectory.path());
+                    moduleClassesDirectory.makeDirectories();
+                    uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.CLASS_OUTPUT, moduleName, List.of(moduleClassesDirectory.path())));
+
+                    // This doesn't fail, but it doesn't work either: Module B depends on A.  Module B gets a module path
+                    // pointing to the exploded module of A.  Compilation of B fails with "module not found: example.A".
+                    // This is likely OK: Use the union of module paths for the compile.
+                    uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_PATH, moduleName, module.modulePath().toPaths()));
+
+                    // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
+                    //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
+                }
+
+                Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(sourcePaths);
+
+                var options = new ArrayList<String>(compilation.options());
+
+                if (!compilation.release().matchesJreVersion()) {
+                    options.add("--release");
+                    options.add(Integer.toString(compilation.release().releaseInt()));
+                }
+
+                // Avoid generating class files for implicitly referenced files
+                options.add("-implicit:none");
+
+                // TODO: Enable dependency generation. Append file=foo?
+                // options.add("--debug=completionDeps=source,class");
+
+                JavaCompiler.CompilationTask task = compiler.getTask(writer, standardFileManager, collector, options, null, compilationUnits);
+
+                try {
+                    success = task.call();
+                } catch (IllegalStateException e) {
+                    success = false;
+                    exception = e;
+                }
+            } finally {
+                // Since we force all class files to be written to module-specific destination directories, no class
+                // files should be written to the non-module-specific destination directory.  As noted above, we
+                // need to specify such a directory, as the javac tool required it (for unknown reason - a bug?).
+                // If the compiler actually writes files to the destination directory, we need to figure out what
+                // that means, so throw an exception to fail as loudly as we can.
+                int numDeleted = classOutput.deleteRecursively();
+                if (numDeleted > 1) {
+                    throw new ModuleCompilerException((numDeleted - 1) + " files were written to the temporary and " +
+                                                              "non-module output directory for class files!?");
+                }
+            }
+        }
+
+        List<Diagnostic> diagnostics = collector
+                .getDiagnostics()
+                .stream()
+                .map(diagnostic -> new Diagnostic(
+                        diagnostic.getKind(),
+                        Optional.ofNullable(diagnostic.getSource()),
+                        positionOf(diagnostic.getPosition()),
+                        positionOf(diagnostic.getStartPosition()),
+                        positionOf(diagnostic.getEndPosition()),
+                        positionOf(diagnostic.getLineNumber()),
+                        positionOf(diagnostic.getColumnNumber()),
+                        Optional.ofNullable(diagnostic.getCode()),
+                        diagnostic.getMessage(compilation.locale())))
+                .collect(Collectors.toList());
+
+        String out = writer.toString();
+        var duration = Duration.ofNanos(System.nanoTime() - startNanos);
+        return new CompilationResult(success, duration, diagnostics, out, exception);
+    }
+
+    private List<Path> sourceFiles(List<Path> sourceDirectories) {
+        return sourceDirectories.stream()
+                .map(Pathname::of)
+                .flatMap(pathname -> pathname.find(true,
+                                                   (subpathname, attribute) ->
+                                                           attribute.isFile() && subpathname.filename().endsWith(".java") ?
+                                                                   Optional.of(subpathname.path()) :
+                                                                   Optional.empty())
+                        .stream())
+                .collect(Collectors.toList());
+    }
+
+    private Pathname resolveModuleClassesDirectory(Optional<Path> moduleClassOutputDirectory,
+                                                   OutputDirectory outputDirectory,
+                                                   String moduleName) {
+        return moduleClassOutputDirectory.map(Pathname::of)
+                                         .orElseGet(() -> outputDirectory.directory().resolve(moduleName).resolve("classes"));
+
+    }
+
+    private Pathname resolveClassDirectory(OutputDirectory outputDirectory) {
+        return outputDirectory.directory().resolve("classes");
+    }
+
+    private record OutputDirectory(Pathname directory, boolean isTemporary) implements TemporaryDirectory {
+        @Override
+        public void close() {
+            if (isTemporary)
+                directory.deleteRecursively();
+        }
+    }
+
+    private OutputDirectory resolveOutputDirectory(Path outputDirectoryPath) {
+        if (outputDirectoryPath == null) {
+            // Use a temporary output directory
+            Pathname outputDirectory = Pathname.makeTmpdir(Javac.class.getName() + ".", "", null).directory();
+            outputDirectory.resolve(OWNER_FILENAME).writeUtf8(OWNER_MAGIC);
+            return new OutputDirectory(outputDirectory, true);
+        } else {
+            Pathname outputDirectory = Pathname.of(outputDirectoryPath);
+            Pathname ownerFile = outputDirectory.resolve(OWNER_FILENAME);
+            Optional<BasicAttributes> outputDirectoryAttributes = outputDirectory.readAttributesIfExists(true);
+            if (outputDirectoryAttributes.isEmpty()) {
+                // New output directory
+                outputDirectory.makeDirectory();
+                ownerFile.writeUtf8(OWNER_MAGIC);
+                return new OutputDirectory(outputDirectory, false);
+            } else if (outputDirectoryAttributes.get().isDirectory()) {
+                Optional<String> ownerContent = ownerFile.readUtf8IfExists();
+                if (ownerContent.isPresent()) {
+                    if (!ownerContent.get().equals(OWNER_MAGIC))
+                        throw new ModuleCompilerException("Output directory must be created and managed by no.ion.modulec: " + outputDirectory);
+                    // Reusing output directory created earlier
+                    return new OutputDirectory(outputDirectory, false);
+                } else {
+                    if (!outputDirectory.isEmptyDirectory())
+                        throw new ModuleCompilerException("Refuse to use non-empty output directory: " + outputDirectory);
+                    // Claim empty output directory
+                    ownerFile.writeUtf8(OWNER_MAGIC);
+                    return new OutputDirectory(outputDirectory, false);
+                }
+            } else {
+                throw new UncheckedIOException(new NotDirectoryException(outputDirectory.string()));
+            }
+        }
+    }
 
     public static class Params {
         private final ModulePath modulePath = new ModulePath();
@@ -61,6 +253,23 @@ public class Javac {
         }
 
         private record ModuleInfo(List<Path> sourceDirectories, Path destinationDirectory) {}
+
+        /**
+         * Compile the module with the give source directories and write the class files to the destination directory.
+         * There must be exactly one module-info.java in one of the source directories that defines the module.
+         */
+        public Params addModule(String name, ModuleDescriptor.Version version, List<Path> sourceDirectories, Path destinationDirectory) {
+            // This corresponds to the module-specific form of --module-source-path, see e.g.
+            // <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html#the-module-source-path-option">The
+            // Module Source Path Option</a>.
+
+            Objects.requireNonNull(destinationDirectory, "destinationDirectory cannot be null");
+            if (sourceDirectories.isEmpty())
+                throw new IllegalArgumentException("There must be at least one source directory");
+            Objects.requireNonNull(sourceDirectories, "sourceDirectories cannot be null");
+            moduleInfos.add(new ModuleInfo(sourceDirectories, destinationDirectory));
+            return this;
+        }
 
         /**
          * Compile the module with the give source directories and write the class files to the destination directory.
@@ -105,94 +314,7 @@ public class Javac {
         }
     }
 
-    public record Diagnostic(Kind kind,
-                             Optional<JavaFileObject> source,
-                             OptionalLong position,
-                             OptionalLong startPosition,
-                             OptionalLong endPosition,
-                             OptionalLong lineNumber,
-                             OptionalLong columnNumber,
-                             Optional<String> code,
-                             String message) {
-        public Diagnostic {
-            Objects.requireNonNull(kind, "kind cannot be null");
-            Objects.requireNonNull(source, "source cannot be null");
-            Objects.requireNonNull(position, "position cannot be null");
-            Objects.requireNonNull(startPosition, "startPosition cannot be null");
-            Objects.requireNonNull(endPosition, "endPosition cannot be null");
-            Objects.requireNonNull(lineNumber, "lineNumber cannot be null");
-            Objects.requireNonNull(columnNumber, "columnNumber cannot be null");
-            Objects.requireNonNull(code, "code cannot be null");
-            Objects.requireNonNull(message, "message cannot be null");
-        }
-    }
-
-    public record Result(boolean success, Duration duration, List<Diagnostic> diagnostics, String out,
-                         RuntimeException exception) {
-        public Result {
-            Objects.requireNonNull(duration, "duration cannot be null");
-            Objects.requireNonNull(duration, "diagnostics cannot be null");
-            Objects.requireNonNull(duration, "out cannot be null");
-        }
-
-        /** Tries to make a message similar to that produced by the javac tool. */
-        public String makeMessage() {
-            if (exception != null) {
-                return exception.getMessage();
-            }
-
-            int errors = 0;
-
-            var buffer = new StringBuilder();
-            for (var diagnostic : diagnostics) {
-                if (diagnostic.kind == Kind.ERROR) {
-                    errors += 1;
-                }
-
-                if (diagnostic.source.isPresent()) {
-                    buffer.append(diagnostic.source().get().getName());
-                    diagnostic.lineNumber().ifPresent(lineNumber -> buffer.append(':').append(lineNumber));
-                    buffer.append(": ");
-                    if (diagnostic.kind == Kind.ERROR) {
-                        buffer.append("error: ");
-                    } else if (diagnostic.kind == Kind.WARNING || diagnostic.kind == Kind.MANDATORY_WARNING) {
-                        buffer.append("warning: ");
-                    }
-                    buffer.append(diagnostic.message).append('\n');
-
-                    diagnostic.lineNumber.ifPresent(lineno -> {
-                        CharSequence charSequence = uncheckIO(() -> diagnostic.source().get().getCharContent(true));
-                        if (charSequence != null) {
-                            String content = String.valueOf(charSequence);
-                            String[] lines = content.lines().toArray(String[]::new);
-                            if (lineno - 1 >= 0 && lineno - 1 < lines.length) {
-                                String line = lines[(int) (lineno - 1)];
-                                buffer.append(line).append('\n');
-                                diagnostic.columnNumber.ifPresent(columnNumber -> {
-                                    if (columnNumber > 1)
-                                        buffer.append(" ".repeat((int) (columnNumber - 1)));
-                                    buffer.append("^\n");
-                                });
-                            }
-                        }
-                    });
-                }
-            }
-
-            if (errors > 0) {
-                buffer.append(errors).append(errors == 1 ? " error\n" : " errors\n");
-            }
-
-            if (!out.isEmpty())
-                buffer.append(out);
-
-            buffer.append(success ? "OK\n" : "FAILED\n");
-            buffer.append(String.format("Completed in %.3fs\n", duration.toNanos() / 1000_000.0));
-            return buffer.toString();
-        }
-    }
-
-    public Result compile(Params params) {
+    public CompilationResult compile(Params params) {
         long startNanos = System.nanoTime();
 
         var collector = new DiagnosticCollector<JavaFileObject>();
@@ -211,7 +333,7 @@ public class Javac {
 
             Set<String> modules = new HashSet<>(params.moduleInfos.size());
             for (var moduleInfo : params.moduleInfos) {
-                String module = findModuleName(moduleInfo.sourceDirectories, params.sourceVersion());
+                String module = resolveModuleName(null, moduleInfo.sourceDirectories, params.sourceVersion());
                 if (!modules.add(module))
                     throw new ModuleCompilerException("Module added twice: " + module);
 
@@ -279,12 +401,14 @@ public class Javac {
 
         String out = writer.toString();
         var duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new Result(success, duration, diagnostics, out, exception);
+        return new CompilationResult(success, duration, diagnostics, out, exception);
     }
 
     private static final Pattern MODULE_PATTERN = Pattern.compile("^ *(open +)?module +([a-zA-Z0-9_.]+)");
 
-    private String findModuleName(List<Path> sources, SourceVersion release) {
+    private String resolveModuleName(String moduleName, List<Path> sources, SourceVersion release) {
+        if (moduleName != null)
+            return moduleName;
         String module = null;
         for (Path sourcePath : sources) {
             Pathname moduleInfoJavaPathname = Pathname.of(sourcePath).resolve("module-info.java");
