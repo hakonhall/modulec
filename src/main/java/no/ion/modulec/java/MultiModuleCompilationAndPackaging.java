@@ -1,6 +1,5 @@
 package no.ion.modulec.java;
 
-import java.lang.module.ModuleDescriptor;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -23,7 +22,6 @@ public class MultiModuleCompilationAndPackaging {
     private Charset charset = StandardCharsets.UTF_8;
     private final List<ModuleCompilationAndPackaging> modules = new ArrayList<>();
     private ModulePath modulePath = new ModulePath();
-    private ModuleDescriptor.Version version = null;
     private final List<String> options = new ArrayList<>();
     private Path outputDirectory = null;
 
@@ -54,11 +52,6 @@ public class MultiModuleCompilationAndPackaging {
         return this;
     }
 
-    public MultiModuleCompilationAndPackaging setVersion(ModuleDescriptor.Version version) {
-        this.version = requireNonNull(version, "version cannot be null");
-        return this;
-    }
-
     public MultiModuleCompilationAndPackaging addOptions(String... options) {
         // TODO: verify no options clashes with the ones we control, e.g. --module-source-path, --release, -d, etc.
         Collections.addAll(this.options, options);
@@ -76,7 +69,6 @@ public class MultiModuleCompilationAndPackaging {
     public Charset charset() { return charset; }
     public List<ModuleCompilationAndPackaging> modules() { return List.copyOf(modules); }
     public ModulePath modulePath() { return modulePath; }
-    public Optional<ModuleDescriptor.Version> version() { return Optional.ofNullable(version); }
     public List<String> options() { return List.copyOf(options); }
     public Optional<Path> outputDirectory() { return Optional.ofNullable(outputDirectory); }
 
@@ -88,7 +80,6 @@ public class MultiModuleCompilationAndPackaging {
                 ", charset=" + charset +
                 ", modules=" + modules +
                 ", modulePath=" + modulePath +
-                ", version=" + version +
                 ", options=" + options +
                 ", outputDirectory=" + outputDirectory +
                 '}';

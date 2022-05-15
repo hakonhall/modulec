@@ -1,0 +1,50 @@
+Usage: modulec [OPTION...] [--module [MODULE_OPTION...]]...
+Compile and package Java modules into modular JARs.
+
+Options:
+  -P,--module-path-entry MPATHENT...   Add MPATHENT to the module path.  It
+                           must be a path to a modular JAR, or to an exploded
+                           module, or to a directory of those.  Cannot contain
+                           ":".  Repeatable.
+  -p,--module-path MPATH   Sets the module path. Overrides any earlier -P.
+  -v,--version VERSION     The module version, unless overridden by a
+                           -v/--version in the module option.
+  -w,--work WORK           Working directory to be reused by modulec over
+                           consecutive invocations.
+
+Module options:
+  -d,--destination DEST    Directory kept in sync with the intermediate class
+                           files, by default WORK/classes.
+  -f,--file JARFILE        If JARFILE is a directory, the modular JAR is
+                           written to that directory with the default filename
+                           NAME[-VERSION].jar, depending on whether VERSION has
+                           been specified or not.  Otherwise, if JARFILE
+                           doesn't contain any '/' it is a short-hand for
+                           WORK/JARFILE.  Defaults to the default filename,
+                           i.e. effectively WORK/NAME[-VERSION].jar.
+  -e,--main-class CLASS    The main class.
+  -M,--manifest MANIFEST   Path to a manifest file.
+  -m,--module              Same as -n/--module-name with a NAME that is read
+                           from module-info.java.
+  -n,--module-name NAME    All following options and arguments, up to the next
+                           -n/--module-name or -m/--module, are module options
+                           that apply to the module NAME.
+  -r,--resource RESRC...   Path to a directory of resource files to include at
+                           the root in the modular JAR. Repeatable.
+  -s,--source SRC...       Path to a directory of Java source files. Repeatable
+  -v,--version VERSION     Module version.
+
+Example:
+  Compile two maven project at path pdir1 and pdir2 with a version 1.2.3, and
+  set the main class for pdir2 to no.ion.example.Main, given
+  pdir1/src/main/resources exists while pdir2/src/main/resources doesn't:
+      modulec -v 1.2.3 -w .modulec.work \
+        -m -s pdir1/src/main/java -r pdir1/src/main/resources \
+        -m -s pdir2/src/main/java
+  If the module name in pdir1/src/main/java/module-info.java is p.dir.one and
+  pdir2/src/main/java/module-info.java is p.dir.two, the following files and
+  directories will be written (and possibly more):
+      pdir1/target/p.dir.one-1.2.3.jar
+      pdir1/target/classes/
+      pdir2/target/p.dir.two-1.2.3.jar
+      pdir2/target/classes/

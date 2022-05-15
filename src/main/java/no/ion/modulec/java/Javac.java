@@ -14,22 +14,14 @@ import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
-import java.lang.module.ModuleDescriptor;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
-import java.util.Set;
-import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -48,98 +40,106 @@ public class Javac {
         long startNanos = System.nanoTime();
 
         var collector = new DiagnosticCollector<JavaFileObject>();
-        StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, compilation.locale(), compilation.charset());
         var writer = new StringWriter();
         boolean success;
         RuntimeException exception = null;
 
-        try (OutputDirectory outputDirectory = resolveOutputDirectory(compilation.outputDirectory().orElse(null))) {
-            compilation.setOutputDirectory(outputDirectory.directory().path());
-            // For some reason Java requires setLocationFromPaths(CLASS_OUTPUT, ...) (aka -d) is invoked when
-            // setLocationForModule(MODULE_SOURCE_PATH, ...) (aka --module-source-path) is set.  We output non-module-specific
-            // class files to a special classes directory, and verify no files were written by the compiler (see finally).
-            Pathname classOutput = resolveClassDirectory(outputDirectory);
-            try {
-                // These setLocationFromPaths() must be called before setLocationForModule(), as the former clears the latter.
-                // And it must exist.
-                classOutput.makeDirectories();
-                uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(classOutput.path())));
-                uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.MODULE_PATH, compilation.modulePath().toPaths()));
-
-                int nModules = compilation.modules().size();
-                if (nModules == 0)
-                    throw new ModuleCompilerException("No modules specified");
-                var moduleNames = new HashSet<String>(nModules);
-                var sourcePaths = new ArrayList<Path>();
-                for (var module : compilation.modules()) {
-                    List<Path> sourceDirectories = module.sourceDirectories();
-                    if (sourceDirectories.isEmpty())
-                        throw new ModuleCompilerException("No source directories" + module.name().map(n -> " for module " + n).orElse(""));
-
-                    List<Path> moduleSourcePaths = sourceFiles(sourceDirectories);
-                    if (moduleSourcePaths.isEmpty())
-                        throw new ModuleCompilerException("No source files found in " + sourceDirectories);
-
-                    sourcePaths.addAll(moduleSourcePaths);
-
-                    String moduleName = resolveModuleName(module.name().orElse(null), module.sourceDirectories(), compilation.release().sourceVersion());
-                    if (!moduleNames.add(moduleName))
-                        throw new ModuleCompilerException("Module added twice: " + moduleName);
-                    module.setName(moduleName);
-
-                    uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_SOURCE_PATH, moduleName, module.sourceDirectories()));
-
-                    // setLocationForModule fails unless destination directory exists.
-                    Pathname moduleClassesDirectory = resolveModuleClassesDirectory(module.classOutputDirectory(),
-                                                                                    outputDirectory, moduleName);
-                    module.setClassOutputDirectory(moduleClassesDirectory.path());
-                    moduleClassesDirectory.makeDirectories();
-                    uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.CLASS_OUTPUT, moduleName, List.of(moduleClassesDirectory.path())));
-
-                    // This doesn't fail, but it doesn't work either: Module B depends on A.  Module B gets a module path
-                    // pointing to the exploded module of A.  Compilation of B fails with "module not found: example.A".
-                    // This is likely OK: Use the union of module paths for the compile.
-                    uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_PATH, moduleName, module.modulePath().toPaths()));
-
-                    // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
-                    //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
-                }
-
-                Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(sourcePaths);
-
-                var options = new ArrayList<String>(compilation.options());
-
-                if (!compilation.release().matchesJreVersion()) {
-                    options.add("--release");
-                    options.add(Integer.toString(compilation.release().releaseInt()));
-                }
-
-                // Avoid generating class files for implicitly referenced files
-                options.add("-implicit:none");
-
-                // TODO: Enable dependency generation. Append file=foo?
-                // options.add("--debug=completionDeps=source,class");
-
-                JavaCompiler.CompilationTask task = compiler.getTask(writer, standardFileManager, collector, options, null, compilationUnits);
-
+        StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, compilation.locale(), compilation.charset());
+        try {
+            try (OutputDirectory outputDirectory = resolveOutputDirectory(compilation.outputDirectory().orElse(null))) {
+                compilation.setOutputDirectory(outputDirectory.directory().path());
+                // For some reason Java requires setLocationFromPaths(CLASS_OUTPUT, ...) (aka -d) is invoked when
+                // setLocationForModule(MODULE_SOURCE_PATH, ...) (aka --module-source-path) is set.  We output non-module-specific
+                // class files to a special classes directory, and verify no files were written by the compiler (see finally).
+                Pathname classOutput = resolveClassDirectory(outputDirectory);
                 try {
-                    success = task.call();
-                } catch (IllegalStateException e) {
-                    success = false;
-                    exception = e;
-                }
-            } finally {
-                // Since we force all class files to be written to module-specific destination directories, no class
-                // files should be written to the non-module-specific destination directory.  As noted above, we
-                // need to specify such a directory, as the javac tool required it (for unknown reason - a bug?).
-                // If the compiler actually writes files to the destination directory, we need to figure out what
-                // that means, so throw an exception to fail as loudly as we can.
-                int numDeleted = classOutput.deleteRecursively();
-                if (numDeleted > 1) {
-                    throw new ModuleCompilerException((numDeleted - 1) + " files were written to the temporary and " +
-                                                              "non-module output directory for class files!?");
+                    // These setLocationFromPaths() must be called before setLocationForModule(), as the former clears the latter.
+                    // And it must exist.
+                    classOutput.makeDirectories();
+                    uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(classOutput.path())));
+                    uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.MODULE_PATH, compilation.modulePath().toPaths()));
+
+                    int nModules = compilation.modules().size();
+                    if (nModules == 0)
+                        return CompilationResult.ofError(startNanos, "error: no modules\n");
+                    var moduleNames = new HashSet<String>(nModules);
+                    var sourcePaths = new ArrayList<Path>();
+                    for (var module : compilation.modules()) {
+                        List<Path> sourceDirectories = module.sourceDirectories();
+                        if (sourceDirectories.isEmpty())
+                            return CompilationResult.ofError(startNanos, "error: no source directories" +
+                                    module.name().map(n -> " for module " + n).orElse("") + "\n");
+
+                        List<Path> moduleSourcePaths = sourceFiles(sourceDirectories);
+                        if (moduleSourcePaths.isEmpty())
+                            return CompilationResult.ofError(startNanos, "error: no source files found in " +
+                                    (sourceDirectories.size() == 1 ?
+                                            sourceDirectories.get(0) :
+                                            sourceDirectories) + "\n");
+
+                        sourcePaths.addAll(moduleSourcePaths);
+
+                        String moduleName = resolveModuleName(module.name().orElse(null), module.sourceDirectories(), compilation.release().sourceVersion());
+                        if (!moduleNames.add(moduleName))
+                            return CompilationResult.ofError(startNanos, "error: module added twice: " + moduleName + "\n");
+                        module.setName(moduleName);
+
+                        uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_SOURCE_PATH, moduleName, module.sourceDirectories()));
+
+                        // setLocationForModule fails unless destination directory exists.
+                        Pathname moduleClassesDirectory = resolveModuleClassesDirectory(module.classOutputDirectory(),
+                                                                                        outputDirectory, moduleName);
+                        module.setClassOutputDirectory(moduleClassesDirectory.path());
+                        moduleClassesDirectory.makeDirectories();
+                        uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.CLASS_OUTPUT, moduleName, List.of(moduleClassesDirectory.path())));
+
+                        // This doesn't fail, but it doesn't work either: Module B depends on A.  Module B gets a module path
+                        // pointing to the exploded module of A.  Compilation of B fails with "module not found: example.A".
+                        // This is likely OK: Use the union of module paths for the compile.
+                        uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_PATH, moduleName, module.modulePath().toPaths()));
+
+                        // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
+                        //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
+                    }
+
+                    Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(sourcePaths);
+
+                    var options = new ArrayList<String>(compilation.options());
+
+                    if (!compilation.release().matchesJreVersion()) {
+                        options.add("--release");
+                        options.add(Integer.toString(compilation.release().releaseInt()));
+                    }
+
+                    // Avoid generating class files for implicitly referenced files
+                    options.add("-implicit:none");
+
+                    // TODO: Enable dependency generation. Append file=foo?
+                    // options.add("--debug=completionDeps=source,class");
+
+                    JavaCompiler.CompilationTask task = compiler.getTask(writer, standardFileManager, collector, options, null, compilationUnits);
+
+                    try {
+                        success = task.call();
+                    } catch (IllegalStateException e) {
+                        success = false;
+                        exception = e;
+                    }
+                } finally {
+                    // Since we force all class files to be written to module-specific destination directories, no class
+                    // files should be written to the non-module-specific destination directory.  As noted above, we
+                    // need to specify such a directory, as the javac tool required it (for unknown reason - a bug?).
+                    // If the compiler actually writes files to the destination directory, we need to figure out what
+                    // that means, so throw an exception to fail as loudly as we can.
+                    int numDeleted = classOutput.deleteRecursively();
+                    if (numDeleted > 1) {
+                        throw new ModuleCompilerException((numDeleted - 1) + " files were written to the temporary and " +
+                                                                  "non-module output directory for class files!?");
+                    }
                 }
             }
+        } finally {
+            uncheckIO(standardFileManager::close);
         }
 
         List<Diagnostic> diagnostics = collector
@@ -165,12 +165,17 @@ public class Javac {
     private List<Path> sourceFiles(List<Path> sourceDirectories) {
         return sourceDirectories.stream()
                 .map(Pathname::of)
-                .flatMap(pathname -> pathname.find(true,
-                                                   (subpathname, attribute) ->
-                                                           attribute.isFile() && subpathname.filename().endsWith(".java") ?
-                                                                   Optional.of(subpathname.path()) :
-                                                                   Optional.empty())
-                        .stream())
+                .flatMap(pathname -> {
+                    if (!pathname.isDirectory())
+                        throw new ModuleCompilerException("No such source directory: " + pathname);
+
+                    return pathname.find(true,
+                                         (subpathname, attribute) ->
+                                                 attribute.isFile() && subpathname.filename().endsWith(".java") ?
+                                                         Optional.of(subpathname.path()) :
+                                                         Optional.empty())
+                                   .stream();
+                })
                 .collect(Collectors.toList());
     }
 
@@ -229,181 +234,6 @@ public class Javac {
         }
     }
 
-    public static class Params {
-        private final ModulePath modulePath = new ModulePath();
-        private final List<String> options = new ArrayList<>();
-        private final List<ModuleInfo> moduleInfos = new ArrayList<>();
-        // Should actually be one of com.sun.tools.javac.platform.PlatformProvider.getSupportedPlatformNames().
-        private int release = Runtime.version().feature();
-        private Locale locale = Locale.getDefault();
-        private Charset charset = StandardCharsets.UTF_8;
-
-        public Params() {}
-
-        public ModulePath modulePath() { return modulePath; }
-
-        public Params withModulePath(Consumer<ModulePath> callback) {
-            callback.accept(modulePath);
-            return this;
-        }
-
-        public Params addOptions(String... options) {
-            Collections.addAll(this.options, options);
-            return this;
-        }
-
-        private record ModuleInfo(List<Path> sourceDirectories, Path destinationDirectory) {}
-
-        /**
-         * Compile the module with the give source directories and write the class files to the destination directory.
-         * There must be exactly one module-info.java in one of the source directories that defines the module.
-         */
-        public Params addModule(String name, ModuleDescriptor.Version version, List<Path> sourceDirectories, Path destinationDirectory) {
-            // This corresponds to the module-specific form of --module-source-path, see e.g.
-            // <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html#the-module-source-path-option">The
-            // Module Source Path Option</a>.
-
-            Objects.requireNonNull(destinationDirectory, "destinationDirectory cannot be null");
-            if (sourceDirectories.isEmpty())
-                throw new IllegalArgumentException("There must be at least one source directory");
-            Objects.requireNonNull(sourceDirectories, "sourceDirectories cannot be null");
-            moduleInfos.add(new ModuleInfo(sourceDirectories, destinationDirectory));
-            return this;
-        }
-
-        /**
-         * Compile the module with the give source directories and write the class files to the destination directory.
-         * There must be exactly one module-info.java in one of the source directories that defines the module.
-         */
-        public Params addModule(List<Path> sourceDirectories, Path destinationDirectory) {
-            // This corresponds to the module-specific form of --module-source-path, see e.g.
-            // <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html#the-module-source-path-option">The
-            // Module Source Path Option</a>.
-
-            Objects.requireNonNull(destinationDirectory, "destinationDirectory cannot be null");
-            if (sourceDirectories.isEmpty())
-                throw new IllegalArgumentException("There must be at least one source directory");
-            Objects.requireNonNull(sourceDirectories, "sourceDirectories cannot be null");
-            moduleInfos.add(new ModuleInfo(sourceDirectories, destinationDirectory));
-            return this;
-        }
-
-        /** Set the release to compile for, e.g. 17. By default, the current feature version of this JDK. */
-        public Params setRelease(int release) {
-            try {
-                SourceVersion.valueOf("RELEASE_" + release);
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Unknown release: " + release);
-            }
-            this.release = release;
-            return this;
-        }
-
-        public Params setLocale(Locale locale) {
-            this.locale = Objects.requireNonNull(locale, "Locale cannot be null");
-            return this;
-        }
-
-        public Params setCharset(Charset charset) {
-            this.charset = Objects.requireNonNull(charset, "Charset cannot be null");
-            return this;
-        }
-
-        private SourceVersion sourceVersion() {
-            return SourceVersion.valueOf("RELEASE_" + release);
-        }
-    }
-
-    public CompilationResult compile(Params params) {
-        long startNanos = System.nanoTime();
-
-        var collector = new DiagnosticCollector<JavaFileObject>();
-        StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, params.locale, params.charset);
-        var writer = new StringWriter();
-        boolean success;
-        RuntimeException exception = null;
-        Pathname temporaryDirectory = Pathname.makeTmpdir(Javac.class.getName() + ".", "", null).directory();
-        try {
-            // 1. For some reason, Java requires setLocationFromPaths(CLASS_OUTPUT, ...) (-d) when
-            //    setLocationForModule(MODULE_SOURCE_PATH, ...) (--module-source-path) is set.  We output non-module
-            //    specific class files to a temporary directory, and verify none files were written.
-            // 2. setLocationFromPaths() must be called before setLocationForModule(), as the former clears the latter.
-            uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(temporaryDirectory.path())));
-            uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.MODULE_PATH, params.modulePath.toPaths()));
-
-            Set<String> modules = new HashSet<>(params.moduleInfos.size());
-            for (var moduleInfo : params.moduleInfos) {
-                String module = resolveModuleName(null, moduleInfo.sourceDirectories, params.sourceVersion());
-                if (!modules.add(module))
-                    throw new ModuleCompilerException("Module added twice: " + module);
-
-                uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_SOURCE_PATH, module, moduleInfo.sourceDirectories()));
-                // setLocationForModule fails unless destination directory exists.
-                Pathname.of(moduleInfo.destinationDirectory()).makeDirectories();
-                uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.CLASS_OUTPUT, module, List.of(moduleInfo.destinationDirectory())));
-
-                // This doesn't fail, but it doesn't work either: Module B depends on A.  Module B gets a module path
-                // pointing to the exploded module of A.  Compilation of B fails with "module not found: example.A".
-                // This is likely OK: Use the union of module paths for the compile.
-                //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.MODULE_PATH, module, moduleInfo.modulePath().toPaths()));
-
-                // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
-                //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
-            }
-
-            List<Path> allJavaSourcePaths = findAllJavaSourcePaths(params.moduleInfos);
-            Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(allJavaSourcePaths);
-
-            final List<String> options;
-            if (params.release == Runtime.version().feature()) {
-                options = params.options;
-            } else {
-                options = new ArrayList<>(params.options);
-                options.add("--release");
-                options.add(Integer.toString(params.release));
-            }
-
-            JavaCompiler.CompilationTask task = compiler.getTask(writer, standardFileManager, collector, options, null, compilationUnits);
-
-            try {
-                success = task.call();
-            } catch (IllegalStateException e) {
-                success = false;
-                exception = e;
-            }
-        } finally {
-            // Since we force all class files to be written to module-specific destination directories, no class
-            // files should be written to the non-module-specific destination directory.  As noted above, we
-            // need to specify such a directory, as the javac tool required it (for unknown reason - a bug?).
-            // If the compiler actually writes files to the destination directory, we need to figure out what
-            // that means, so throw an exception to fail as loudly as we can.
-            int numDeleted = temporaryDirectory.deleteRecursively();
-            if (numDeleted > 1) {
-                throw new ModuleCompilerException((numDeleted - 1) + " files were written to the temporary and " +
-                                                  "non-module output directory for class files!?");
-            }
-        }
-
-        List<Diagnostic> diagnostics = collector
-                .getDiagnostics()
-                .stream()
-                .map(diagnostic -> new Diagnostic(
-                        diagnostic.getKind(),
-                        Optional.ofNullable(diagnostic.getSource()),
-                        positionOf(diagnostic.getPosition()),
-                        positionOf(diagnostic.getStartPosition()),
-                        positionOf(diagnostic.getEndPosition()),
-                        positionOf(diagnostic.getLineNumber()),
-                        positionOf(diagnostic.getColumnNumber()),
-                        Optional.ofNullable(diagnostic.getCode()),
-                        diagnostic.getMessage(params.locale)))
-                .collect(Collectors.toList());
-
-        String out = writer.toString();
-        var duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new CompilationResult(success, duration, diagnostics, out, exception);
-    }
-
     private static final Pattern MODULE_PATTERN = Pattern.compile("^ *(open +)?module +([a-zA-Z0-9_.]+)");
 
     private String resolveModuleName(String moduleName, List<Path> sources, SourceVersion release) {
@@ -430,19 +260,6 @@ public class Javac {
             throw new ModuleCompilerException("No module-info.java found in any of the source directories: " + sources);
 
         return module;
-    }
-
-    private List<Path> findAllJavaSourcePaths(List<Params.ModuleInfo> moduleInfos) {
-        return moduleInfos.stream()
-                          .flatMap(moduleInfo -> moduleInfo.sourceDirectories.stream())
-                          .map(Pathname::of)
-                          .flatMap(pathname -> pathname.find(true,
-                                                             (subpathname, attribute) ->
-                                                                     attribute.isFile() && subpathname.filename().endsWith(".java") ?
-                                                                     Optional.of(subpathname.path()) :
-                                                                     Optional.empty())
-                                                       .stream())
-                          .collect(Collectors.toList());
     }
 
     private static JavaCompiler getSystemJavaCompiler() {
