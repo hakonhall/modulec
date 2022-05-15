@@ -60,8 +60,12 @@ class JavacTest {
 
 
         var destDir = workDir.resolve("target");
-        var params = new Javac.Params().addModule(List.of(srcDir.path()), destDir.path());
-        CompilationResult result = javac.compile(params);
+
+        var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre());
+        compilation.addModule()
+                .addSourceDirectories(List.of(srcDir.path()))
+                .setClassOutputDirectory(destDir.path());
+        CompilationResult result = javac.compile(compilation);
 
         Optional<BasicAttributes> moduleInfoClassAttributes = destDir.resolve("module-info.class").readAttributesIfExists(true);
         assertTrue(moduleInfoClassAttributes.isPresent());
@@ -76,10 +80,14 @@ class JavacTest {
         TestDirectory.with(JavacTest.class, workDir -> {
             makeTwoModulesWithMultiSources(workDir);
 
-            var params = new Javac.Params()
-                    .addModule(List.of(workDir.resolve("moduleA/src1").path(), workDir.resolve("moduleA/src2").path()), workDir.resolve("moduleA/target").path())
-                    .addModule(List.of(workDir.resolve("moduleB/src").path()), workDir.resolve("moduleB/target").path());
-            CompilationResult result = javac.compile(params);
+            var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre());
+            compilation.addModule()
+                       .addSourceDirectories(List.of(workDir.resolve("moduleA/src1").path(), workDir.resolve("moduleA/src2").path()))
+                       .setClassOutputDirectory(workDir.resolve("moduleA/target").path());
+            compilation.addModule()
+                    .addSourceDirectories(List.of(workDir.resolve("moduleB/src").path()))
+                    .setClassOutputDirectory(workDir.resolve("moduleB/target").path());
+            CompilationResult result = javac.compile(compilation);
             assertTrue(result.success(), "Compilation failed: " + result.makeMessage());
             assertTrue(result.makeMessage().startsWith("OK\n"), "Bad message: " + result.makeMessage());
             assertEquals(0, result.diagnostics().size());
@@ -107,9 +115,11 @@ class JavacTest {
             makeTwoModulesWithMultiSources(workDir);
 
             {
-                var paramsA = new Javac.Params()
-                        .addModule(List.of(workDir.resolve("moduleA/src1").path(), workDir.resolve("moduleA/src2").path()), workDir.resolve("moduleA/target").path());
-                CompilationResult resultA = javac.compile(paramsA);
+                var compilationA = new MultiModuleCompilationAndPackaging(Release.ofJre());
+                compilationA.addModule()
+                        .addSourceDirectories(List.of(workDir.resolve("moduleA/src1").path(), workDir.resolve("moduleA/src2").path()))
+                        .setClassOutputDirectory(workDir.resolve("moduleA/target").path());
+                CompilationResult resultA = javac.compile(compilationA);
                 assertTrue(resultA.success(), "Compilation failed: " + resultA.makeMessage());
                 assertTrue(resultA.makeMessage().startsWith("OK\n"), "Bad message: " + resultA.makeMessage());
                 assertEquals(0, resultA.diagnostics().size());
@@ -121,10 +131,12 @@ class JavacTest {
             }
 
             {
-                var paramsB = new Javac.Params()
-                        .addModule(List.of(workDir.resolve("moduleB/src").path()), workDir.resolve("moduleB/target").path())
-                        .withModulePath(modulePath -> modulePath.addExplodedModule(workDir.resolve("moduleA/target").path()));
-                CompilationResult resultB = javac.compile(paramsB);
+                var compilationB = new MultiModuleCompilationAndPackaging(Release.ofJre());
+                compilationB.setModulePath(new ModulePath().addExplodedModule(workDir.resolve("moduleA/target").path()));
+                compilationB.addModule()
+                            .addSourceDirectories(List.of(workDir.resolve("moduleB/src").path()))
+                            .setClassOutputDirectory(workDir.resolve("moduleB/target").path());
+                CompilationResult resultB = javac.compile(compilationB);
 
                 assertTrue(resultB.success(), "Compilation failed: " + resultB.makeMessage());
                 assertTrue(resultB.makeMessage().startsWith("OK\n"), "Bad message: " + resultB.makeMessage());
@@ -214,19 +226,26 @@ class JavacTest {
         Pathname src = workDir.resolve("src");
         Pathname classes = workDir.resolve("classes");
 
-        var params = new Javac.Params();
-        CompilationResult result = javac.compile(params);
-        assertEquals("error: no source files", result.makeMessage());
+        var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre());
+        CompilationResult result = javac.compile(compilation);
+        // The "no source files" is not informative if no modules were specified
+        //assertEquals("error: no source files", result.makeMessage());
+        assertTrue(result.makeMessage().startsWith("error: no modules"), result.makeMessage());
 
-        Pathname moduleInfoJava = src.resolve("module-info.java")
-                .makeParentDirectories()
-                .writeUtf8("""
+        compilation.addModule()
+                   .addSourceDirectories(List.of(src.path()))
+                   .setClassOutputDirectory(classes.path());
+        src.makeDirectories();
+        result = javac.compile(compilation);
+        assertTrue(result.makeMessage().startsWith("error: no source files found in /"), result.makeMessage());
+
+        src.resolve("module-info.java")
+           .writeUtf8("""
                          module a.example {
                            exports a.example.api;
                          }
                          """);
-        params.addModule(List.of(src.path()), classes.path());
-        result = javac.compile(params);
+        result = javac.compile(compilation);
         String message = result.makeMessage();
         assertTrue(message.contains("""
                              src/module-info.java:2: error: package is empty or does not exist: a.example.api

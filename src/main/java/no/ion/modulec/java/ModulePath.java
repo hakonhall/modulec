@@ -1,9 +1,11 @@
 package no.ion.modulec.java;
 
+import java.nio.file.FileSystem;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Represents the --module-path/-p: A colon-separated list of paths:
@@ -20,6 +22,11 @@ public class ModulePath {
     private final List<Entry> entries = new ArrayList<>();
 
     public ModulePath() {}
+
+    public ModulePath clear() {
+        entries.clear();
+        return this;
+    }
 
     /** A packaged module aka a modular JAR. */
     public ModulePath addModularJar(Path path) {
@@ -44,6 +51,11 @@ public class ModulePath {
         if (pathString.isEmpty())
             throw new IllegalArgumentException("Empty path");
         entries.add(new Entry(path, pathString));
+        return this;
+    }
+
+    public ModulePath addFromColonSeparatedString(FileSystem fileSystem, String modulePath) {
+        Stream.of(modulePath.split(":", -1)).forEach(path -> new Entry(fileSystem.getPath(path), path));
         return this;
     }
 

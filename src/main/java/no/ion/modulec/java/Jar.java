@@ -23,8 +23,7 @@ public class Jar {
             arguments.add(packaging.version().toString());
         }
 
-        // jar(1) works as follows:
-        //  - With --no-manifest, --manifest and --main-class are ignored.
+        // With --no-manifest, jar(1) ignores --manifest and --main-class.
         if (packaging.manifest() != null) {
             if (packaging.manifest().isPresent()) {
                 arguments.add("-m"); // --manifest
@@ -56,7 +55,6 @@ public class Jar {
         printWriter.flush(); // also flushes writer
         String out = writer.toString();
         printWriter.close(); // also closes writer
-
         return new PackagingResult(success, out);
     }
 }

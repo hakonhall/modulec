@@ -90,7 +90,7 @@ public class ModuleCompilationAndPackaging {
     }
 
     public ModuleCompilationAndPackaging setJarPath(Path jarPath) {
-        this.jarPath = requireNonNull(jarPath, "jarPath cannot be null");
+        this.jarPath = jarPath;
         return this;
     }
 

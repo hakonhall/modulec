@@ -14,6 +14,11 @@ public record CompilationResult(boolean success, Duration duration, List<Diagnos
         Objects.requireNonNull(duration, "out cannot be null");
     }
 
+    public static CompilationResult ofError(long startNanos, String message) {
+        Duration duration = Duration.ofNanos(System.nanoTime() - startNanos);
+        return new CompilationResult(false, duration, List.of(), message, null);
+    }
+
     /**
      * Tries to make a message similar to that produced by the javac tool.
      */
