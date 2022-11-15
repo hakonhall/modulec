@@ -14,7 +14,7 @@ public class ProgramArgumentParser {
     private final FileSystem fileSystem;
     private final String[] args;
     private int argi;
-    private final Options options = new Options();
+    private final Options options;
 
     public static Options parse(FileSystem fileSystem, String... args) throws ArgumentException {
         ProgramArgumentParser parser = new ProgramArgumentParser(fileSystem, args);
@@ -25,6 +25,7 @@ public class ProgramArgumentParser {
     private ProgramArgumentParser(FileSystem fileSystem, String[] args) {
         this.fileSystem = fileSystem;
         this.args = args;
+        this.options = new Options(fileSystem);
     }
 
     private void parse() {
@@ -54,6 +55,10 @@ public class ProgramArgumentParser {
                 case "-w":
                 case "--work":
                     options.topLevelOptions().setWork(nextAsPathArgument());
+                    break;
+                case "-W":
+                case "--warnings":
+                    options.topLevelOptions().setWarnings(nextOptionArgument());
                     break;
 
                 case "-m":

@@ -52,6 +52,11 @@ public class MultiModuleCompilationAndPackaging {
         return this;
     }
 
+    public MultiModuleCompilationAndPackaging addOptions(List<String> options) {
+        options.forEach(this::addOptions);
+        return this;
+    }
+
     public MultiModuleCompilationAndPackaging addOptions(String... options) {
         // TODO: verify no options clashes with the ones we control, e.g. --module-source-path, --release, -d, etc.
         Collections.addAll(this.options, options);
