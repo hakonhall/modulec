@@ -11,6 +11,7 @@ Options:
                            -v/--version in the module option.
   -w,--work WORK           Working directory to be reused by modulec over
                            consecutive invocations.
+  -W,--warnings LINT       Same as -Xlint:LINT, and "all" by default.
 
 Module options:
   -d,--destination DEST    Directory kept in sync with the intermediate class

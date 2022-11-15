@@ -34,6 +34,8 @@ public class ModuleCompiler2 {
         var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre());
 
         compilation.setOutputDirectory(options.topLevelOptions().work());
+        compilation.addOptions(options.topLevelOptions().options());
+        compilation.modulePath().clear().addFrom(options.topLevelOptions().modulePath());
 
         for (var moduleOptions : options.moduleOptions()) {
             ModuleCompilationAndPackaging module = compilation.addModule();
@@ -42,6 +44,7 @@ public class ModuleCompiler2 {
             moduleOptions.mainClass().ifPresent(module::setMainClass);
             moduleOptions.manifest().ifPresent(module::addManifest);
             moduleOptions.moduleName().ifPresent(module::setName);
+            moduleOptions.version().ifPresent(module::setVersion);
             module.addSourceDirectories(moduleOptions.sources());
             List<Path> toInclude = List.of(fileSystem.getPath("."));
             moduleOptions.resources().forEach(resourceDirectory -> module.addResources(resourceDirectory, toInclude));

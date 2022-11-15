@@ -104,7 +104,9 @@ public class Javac {
 
                     Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(sourcePaths);
 
-                    var options = new ArrayList<String>(compilation.options());
+                    var options = new ArrayList<String>();
+
+                    options.addAll(compilation.options());
 
                     if (!compilation.release().matchesJreVersion()) {
                         options.add("--release");

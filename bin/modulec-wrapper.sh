@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "DEPRECATED: You should use modc instead." >&2
+
 function Fail {
     echo "$*" >&2
     exit 1

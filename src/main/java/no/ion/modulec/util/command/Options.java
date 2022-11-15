@@ -1,13 +1,16 @@
 package no.ion.modulec.util.command;
 
+import java.nio.file.FileSystem;
 import java.util.ArrayList;
 import java.util.List;
 
 public class Options {
-    private final TopLevelOptions topLevelOptions = new TopLevelOptions();
+    private final TopLevelOptions topLevelOptions;
     private final List<ModuleOptions> moduleOptions = new ArrayList<>();
 
-    public Options() {}
+    public Options(FileSystem fileSystem) {
+        topLevelOptions = new TopLevelOptions(fileSystem);
+    }
 
     public List<ModuleOptions> moduleOptions() { return List.copyOf(moduleOptions); }
 

@@ -28,6 +28,10 @@ public class ModulePath {
         return this;
     }
 
+    public void addFrom(ModulePath that) {
+        entries.addAll(that.entries);
+    }
+
     /** A packaged module aka a modular JAR. */
     public ModulePath addModularJar(Path path) {
         return addEntry(path);
@@ -55,7 +59,7 @@ public class ModulePath {
     }
 
     public ModulePath addFromColonSeparatedString(FileSystem fileSystem, String modulePath) {
-        Stream.of(modulePath.split(":", -1)).forEach(path -> new Entry(fileSystem.getPath(path), path));
+        Stream.of(modulePath.split(":", -1)).forEach(path -> entries.add(new Entry(fileSystem.getPath(path), path)));
         return this;
     }
 

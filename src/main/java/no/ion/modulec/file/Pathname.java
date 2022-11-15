@@ -43,7 +43,15 @@ public class Pathname {
     public static Pathname of(Path path) { return new Pathname(path); }
     public Pathname(Path path) { this.path = path; }
 
-    public Pathname parent() { return Pathname.of(path.getParent()); }
+    public Pathname parent() {
+        Path parent = path.getParent();
+        return parent == null ?
+               path.toString().isEmpty() || path.toString().equals(".") ?
+               Pathname.of(path.getFileSystem().getPath("..")) :
+               Pathname.of(path.getFileSystem().getPath(".")) :
+               Pathname.of(parent);
+    }
+
     public Pathname resolve(Pathname other) { return resolve(other.path); }
     public Pathname resolve(Path other) { return of(path.resolve(other)); }
     public Pathname resolve(String other) { return of(path.resolve(other)); }
