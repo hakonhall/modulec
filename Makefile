@@ -12,7 +12,17 @@ TEST_DEPS := target/no.ion.modulec-1.0.0.jar:lib/junit-platform-console-standalo
 
 default: junit
 
-junit: bin/modulec-shebang target/junit.ts
+junit: bin/modulec-shebang target/modc target/junit.ts
+
+target/modc: bin/modc.sh target/no.ion.modulec-1.0.0.jar
+	cat $^ > $@
+	chmod +x $@
+
+target/no.ion.modulec-1.0.0.jar:
+	mvn install
+
+#target/no.ion.modulec-1.0.0.jar: Makefile pom.xml $(JAVA_SOURCES)
+#	bin/modulec.sh -v 1.0.0 -e no.ion.modulec.ModuleCompiler2 src/main/java
 
 bin/modulec-shebang: src/main/java/no/ion/modulec/ModuleCompiler.java
 	printf "#!/home/hakon/share/jdk-11/bin/java --source 11\n\n" > $@
@@ -24,16 +34,17 @@ target/junit.ts: target/no.ion.modulec-1.0.0.jar $(TEST_FILES)
 	java -jar lib/junit-platform-console-standalone-1.6.2.jar --disable-banner -E junit-vintage --fail-if-no-tests --config junit.jupiter.execution.parallel.enabled=true -cp target/no.ion.modulec-1.0.0.jar -cp target/test-classes -cp lib/jimfs-1.1.jar -cp lib/guava-18.0.jar --scan-class-path target/test-classes
 	touch $@
 
-target/no.ion.modulec-1.0.0.jar: Makefile pom.xml $(JAVA_SOURCES)
-	bin/modulec.sh -v 1.0.0 src/main/java
-
-install: ~/bin ~/bin/modulec
+install: ~/bin ~/bin/modulec ~/bin/modc
 
 ~/bin:
-	@echo "Warning: Create ~/bin to install modulec there"
+	mkdir $@
 
 ~/bin/modulec:
 	ln -s $(PWD)/bin/modulec-wrapper.sh ~/bin/modulec
+
+~/bin/modc: target/modc ~/bin
+	rm -f $@
+	cp $< $@
 
 clean:
 	rm -f ~/bin/modulec
