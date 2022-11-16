@@ -56,7 +56,7 @@ public class ModuleCompiler2 {
         try {
             result = compiler.make(compilation);
         } catch (ModuleCompilerException e) {
-            System.out.println(e.getMessage());
+            System.out.println("modc: " + e.getMessage());
             return 1;
         }
 
