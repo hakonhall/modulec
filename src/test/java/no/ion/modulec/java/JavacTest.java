@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.lang.model.SourceVersion;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -32,6 +33,16 @@ class JavacTest {
     void setUp() {
         workDir = Pathname.of(tempDir);
         assertTrue(workDir.readAttributesIfExists(true).isPresent());
+    }
+
+    @Test
+    void moduleName() {
+        String content = """
+                         @SuppressWarnings("module")
+                         module m1 {
+                         }
+                         """;
+        assertEquals("m1", Javac.moduleNameOf("src/module-info.java", content, SourceVersion.latest()));
     }
 
     @Test

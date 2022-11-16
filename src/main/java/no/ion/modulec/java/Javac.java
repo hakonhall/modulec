@@ -236,7 +236,7 @@ public class Javac {
         }
     }
 
-    private static final Pattern MODULE_PATTERN = Pattern.compile("^ *(open +)?module +([a-zA-Z0-9_.]+)");
+    private static final Pattern MODULE_PATTERN = Pattern.compile("^ *(open +)?module +([a-zA-Z0-9_.]+)", Pattern.MULTILINE);
 
     private String resolveModuleName(String moduleName, List<Path> sources, SourceVersion release) {
         if (moduleName != null)
@@ -249,18 +249,23 @@ public class Javac {
                 continue;
             if (module != null)
                 throw new ModuleCompilerException("Found more than one module-info.java in the module source directories: " + sources);
-            // TODO: Actually parse the files with our compiler.
-            Matcher matcher = MODULE_PATTERN.matcher(moduleInfo.get());
-            if (!matcher.find())
-                throw new ModuleCompilerException("Failed to find the module name in " + moduleInfoJavaPathname.string());
-            module = matcher.group(2);
-            if (!SourceVersion.isName(module, release))
-                throw new ModuleCompilerException("Invalid module name '" + module + "' in " + moduleInfoJavaPathname.string());
+            module = moduleNameOf(moduleInfoJavaPathname.string(), moduleInfo.get(), release);
         }
 
         if (module == null)
             throw new ModuleCompilerException("No module-info.java found in any of the source directories: " + sources);
 
+        return module;
+    }
+
+    /** TODO: Actually parse the module-info.java with our compiler. */
+    static String moduleNameOf(String moduleInfoJavaPathname, String moduleInfoContent, SourceVersion release) {
+        Matcher matcher = MODULE_PATTERN.matcher(moduleInfoContent);
+        if (!matcher.find())
+            throw new ModuleCompilerException("Failed to find the module name in " + moduleInfoJavaPathname);
+        String module = matcher.group(2);
+        if (!SourceVersion.isName(module, release))
+            throw new ModuleCompilerException("Invalid module name '" + module + "' in " + moduleInfoJavaPathname);
         return module;
     }
 
