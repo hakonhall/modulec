@@ -108,7 +108,7 @@ public class ModuleCompilationAndPackaging {
     public ModuleCompilationAndPackaging resolveJarFile() {
         if (jarPath == null) {
             // compilation sets this
-            jarPath = parent.outputDirectory().orElseThrow().resolve(name).resolve(resolveJarFilename());
+            jarPath = parent.buildDirectory().orElseThrow().resolve(name).resolve(resolveJarFilename());
         } else {
             Optional<BasicAttributes> attributes = Pathname.of(jarPath).readAttributesIfExists(true);
             if (attributes.isPresent()) {

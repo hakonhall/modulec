@@ -2,6 +2,8 @@ Usage: modulec [OPTION...] [--module [MODULE_OPTION...]]...
 Compile and package Java modules into modular JARs.
 
 Options:
+  -b,--build BUILD         Build directory completely owned and managed by modc
+                           to speed up repeated builds, by default "target".
   -P,--module-path-entry MPATHENT...   Add MPATHENT to the module path.  It
                            must be a path to a modular JAR, or to an exploded
                            module, or to a directory of those.  Cannot contain
@@ -9,20 +11,11 @@ Options:
   -p,--module-path MPATH   Sets the module path. Overrides any earlier -P.
   -v,--version VERSION     The module version, unless overridden by a
                            -v/--version in the module option.
-  -w,--work WORK           Working directory to be reused by modulec over
-                           consecutive invocations.
-  -W,--warnings LINT       Same as -Xlint:LINT, and "all" by default.
+  -w,--warnings LINT       Same as -Xlint:LINT, by default "all".
 
 Module options:
   -d,--destination DEST    Directory kept in sync with the intermediate class
                            files, by default WORK/classes.
-  -f,--file JARFILE        If JARFILE is a directory, the modular JAR is
-                           written to that directory with the default filename
-                           NAME[-VERSION].jar, depending on whether VERSION has
-                           been specified or not.  Otherwise, if JARFILE
-                           doesn't contain any '/' it is a short-hand for
-                           WORK/JARFILE.  Defaults to the default filename,
-                           i.e. effectively WORK/NAME[-VERSION].jar.
   -e,--main-class CLASS    The main class.
   -M,--manifest MANIFEST   Path to a manifest file.
   -m,--module              Same as -n/--module-name with a NAME that is read
@@ -30,6 +23,13 @@ Module options:
   -n,--module-name NAME    All following options and arguments, up to the next
                            -n/--module-name or -m/--module, are module options
                            that apply to the module NAME.
+  -o,--output OUTPUT       If OUTPUT is a directory, the modular JAR is
+                           written to that directory with the default filename
+                           NAME[-VERSION].jar, depending on whether VERSION has
+                           been specified or not.  Otherwise, if OUTPUT
+                           does NOT contain any '/' it is a short-hand for
+                           BUILD/OUTPUT.  Defaults to the default filename,
+                           i.e. effectively BUILD/NAME[-VERSION].jar.
   -r,--resource RESRC...   Path to a directory of resource files to include at
                            the root in the modular JAR. Repeatable.
   -s,--source SRC...       Path to a directory of Java source files. Repeatable

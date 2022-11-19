@@ -46,12 +46,12 @@ public class Javac {
 
         StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, compilation.locale(), compilation.charset());
         try {
-            try (OutputDirectory outputDirectory = resolveOutputDirectory(compilation.outputDirectory().orElse(null))) {
-                compilation.setOutputDirectory(outputDirectory.directory().path());
+            try (BuildDirectory buildDirectory = resolveBuildDirectory(compilation.buildDirectory().orElse(null))) {
+                compilation.setBuildDirectory(buildDirectory.directory().path());
                 // For some reason Java requires setLocationFromPaths(CLASS_OUTPUT, ...) (aka -d) is invoked when
                 // setLocationForModule(MODULE_SOURCE_PATH, ...) (aka --module-source-path) is set.  We output non-module-specific
                 // class files to a special classes directory, and verify no files were written by the compiler (see finally).
-                Pathname classOutput = resolveClassDirectory(outputDirectory);
+                Pathname classOutput = resolveClassDirectory(buildDirectory);
                 try {
                     // These setLocationFromPaths() must be called before setLocationForModule(), as the former clears the latter.
                     // And it must exist.
@@ -88,7 +88,7 @@ public class Javac {
 
                         // setLocationForModule fails unless destination directory exists.
                         Pathname moduleClassesDirectory = resolveModuleClassesDirectory(module.classOutputDirectory(),
-                                                                                        outputDirectory, moduleName);
+                                                                                        buildDirectory, moduleName);
                         module.setClassOutputDirectory(moduleClassesDirectory.path());
                         moduleClassesDirectory.makeDirectories();
                         uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.CLASS_OUTPUT, moduleName, List.of(moduleClassesDirectory.path())));
@@ -182,18 +182,18 @@ public class Javac {
     }
 
     private Pathname resolveModuleClassesDirectory(Optional<Path> moduleClassOutputDirectory,
-                                                   OutputDirectory outputDirectory,
+                                                   BuildDirectory buildDirectory,
                                                    String moduleName) {
         return moduleClassOutputDirectory.map(Pathname::of)
-                                         .orElseGet(() -> outputDirectory.directory().resolve(moduleName).resolve("classes"));
+                                         .orElseGet(() -> buildDirectory.directory().resolve(moduleName).resolve("classes"));
 
     }
 
-    private Pathname resolveClassDirectory(OutputDirectory outputDirectory) {
-        return outputDirectory.directory().resolve("classes");
+    private Pathname resolveClassDirectory(BuildDirectory buildDirectory) {
+        return buildDirectory.directory().resolve("classes");
     }
 
-    private record OutputDirectory(Pathname directory, boolean isTemporary) implements TemporaryDirectory {
+    private record BuildDirectory(Pathname directory, boolean isTemporary) implements TemporaryDirectory {
         @Override
         public void close() {
             if (isTemporary)
@@ -201,37 +201,37 @@ public class Javac {
         }
     }
 
-    private OutputDirectory resolveOutputDirectory(Path outputDirectoryPath) {
-        if (outputDirectoryPath == null) {
-            // Use a temporary output directory
-            Pathname outputDirectory = Pathname.makeTmpdir(Javac.class.getName() + ".", "", null).directory();
-            outputDirectory.resolve(OWNER_FILENAME).writeUtf8(OWNER_MAGIC);
-            return new OutputDirectory(outputDirectory, true);
+    private BuildDirectory resolveBuildDirectory(Path buildDirectoryPath) {
+        if (buildDirectoryPath == null) {
+            // Use a temporary build directory
+            Pathname buildDirectory = Pathname.makeTmpdir(Javac.class.getName() + ".", "", null).directory();
+            buildDirectory.resolve(OWNER_FILENAME).writeUtf8(OWNER_MAGIC);
+            return new BuildDirectory(buildDirectory, true);
         } else {
-            Pathname outputDirectory = Pathname.of(outputDirectoryPath);
-            Pathname ownerFile = outputDirectory.resolve(OWNER_FILENAME);
-            Optional<BasicAttributes> outputDirectoryAttributes = outputDirectory.readAttributesIfExists(true);
-            if (outputDirectoryAttributes.isEmpty()) {
-                // New output directory
-                outputDirectory.makeDirectory();
+            Pathname buildDirectory = Pathname.of(buildDirectoryPath);
+            Pathname ownerFile = buildDirectory.resolve(OWNER_FILENAME);
+            Optional<BasicAttributes> buildDirectoryAttributes = buildDirectory.readAttributesIfExists(true);
+            if (buildDirectoryAttributes.isEmpty()) {
+                // New build directory
+                buildDirectory.makeDirectories();
                 ownerFile.writeUtf8(OWNER_MAGIC);
-                return new OutputDirectory(outputDirectory, false);
-            } else if (outputDirectoryAttributes.get().isDirectory()) {
+                return new BuildDirectory(buildDirectory, false);
+            } else if (buildDirectoryAttributes.get().isDirectory()) {
                 Optional<String> ownerContent = ownerFile.readUtf8IfExists();
                 if (ownerContent.isPresent()) {
                     if (!ownerContent.get().equals(OWNER_MAGIC))
-                        throw new ModuleCompilerException("Output directory must be created and managed by no.ion.modulec: " + outputDirectory);
-                    // Reusing output directory created earlier
-                    return new OutputDirectory(outputDirectory, false);
+                        throw new ModuleCompilerException("Build directory must be created and managed by no.ion.modulec: " + buildDirectory);
+                    // Reusing build directory created earlier
+                    return new BuildDirectory(buildDirectory, false);
                 } else {
-                    if (!outputDirectory.isEmptyDirectory())
-                        throw new ModuleCompilerException("Refuse to use non-empty output directory: " + outputDirectory);
-                    // Claim empty output directory
+                    if (!buildDirectory.isEmptyDirectory())
+                        throw new ModuleCompilerException("Refuse to use non-empty build directory: " + buildDirectory);
+                    // Claim empty build directory
                     ownerFile.writeUtf8(OWNER_MAGIC);
-                    return new OutputDirectory(outputDirectory, false);
+                    return new BuildDirectory(buildDirectory, false);
                 }
             } else {
-                throw new UncheckedIOException(new NotDirectoryException(outputDirectory.string()));
+                throw new UncheckedIOException(new NotDirectoryException(buildDirectory.string()));
             }
         }
     }

@@ -42,7 +42,7 @@ public class MultiModuleCompilationAndPackagingTest {
                                     """);
 
         var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre())
-                .setOutputDirectory(workDirectory.resolve("out").path());
+                .setBuildDirectory(workDirectory.resolve("out").path());
         compilation.addModule()
                    .addSourceDirectories(List.of(srcA.path()))
                    .setMainClass("no.ion.a.A")
@@ -91,7 +91,7 @@ public class MultiModuleCompilationAndPackagingTest {
                                     """);
 
         var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre())
-                .setOutputDirectory(workDirectory.resolve("out").path());
+                .setBuildDirectory(workDirectory.resolve("out").path());
         compilation.addModule()
                    .addSourceDirectories(List.of(srcA.path()));
         compilation.addModule()

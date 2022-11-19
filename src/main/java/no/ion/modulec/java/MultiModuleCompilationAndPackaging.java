@@ -23,7 +23,7 @@ public class MultiModuleCompilationAndPackaging {
     private final List<ModuleCompilationAndPackaging> modules = new ArrayList<>();
     private ModulePath modulePath = new ModulePath();
     private final List<String> options = new ArrayList<>();
-    private Path outputDirectory = null;
+    private Path buildDirectory = null;
 
     public MultiModuleCompilationAndPackaging(Release release) {
         this.release = Objects.requireNonNull(release, "release cannot be null");
@@ -64,8 +64,8 @@ public class MultiModuleCompilationAndPackaging {
     }
 
     /** Set the location of a directory managed by no.ion.modulec to store intermediates across multiple invocations. */
-    public MultiModuleCompilationAndPackaging setOutputDirectory(Path outputDirectory) {
-        this.outputDirectory = requireNonNull(outputDirectory, "outputDirectory cannot be null");
+    public MultiModuleCompilationAndPackaging setBuildDirectory(Path buildDirectory) {
+        this.buildDirectory = requireNonNull(buildDirectory, "buildDirectory cannot be null");
         return this;
     }
 
@@ -75,18 +75,18 @@ public class MultiModuleCompilationAndPackaging {
     public List<ModuleCompilationAndPackaging> modules() { return List.copyOf(modules); }
     public ModulePath modulePath() { return modulePath; }
     public List<String> options() { return List.copyOf(options); }
-    public Optional<Path> outputDirectory() { return Optional.ofNullable(outputDirectory); }
+    public Optional<Path> buildDirectory() { return Optional.ofNullable(buildDirectory); }
 
     @Override
     public String toString() {
         return "MultiModuleCompilationAndPackaging{" +
-                "release=" + release +
-                ", locale=" + locale +
-                ", charset=" + charset +
-                ", modules=" + modules +
-                ", modulePath=" + modulePath +
-                ", options=" + options +
-                ", outputDirectory=" + outputDirectory +
-                '}';
+               "release=" + release +
+               ", locale=" + locale +
+               ", charset=" + charset +
+               ", modules=" + modules +
+               ", modulePath=" + modulePath +
+               ", options=" + options +
+               ", buildDirectory=" + buildDirectory +
+               '}';
     }
 }

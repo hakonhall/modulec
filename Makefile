@@ -8,7 +8,7 @@ TEST_FILES := $(TEST_SOURCES) $(BASIC_SOURCES) $(BAD_MODULE_INFO)
 
 TEST_DEPS := target/no.ion.modulec-1.0.0.jar:lib/junit-platform-console-standalone-1.6.2.jar:lib/jimfs-1.1.jar:lib/guava-18.0.jar
 
-.PHONY: default mvn junit install clean
+.PHONY: default mvn junit clean install uninstall target/no.ion.modulec-1.0.0.jar
 
 default: junit
 
@@ -34,8 +34,6 @@ target/junit.ts: target/no.ion.modulec-1.0.0.jar $(TEST_FILES)
 	java -jar lib/junit-platform-console-standalone-1.6.2.jar --disable-banner -E junit-vintage --fail-if-no-tests --config junit.jupiter.execution.parallel.enabled=true -cp target/no.ion.modulec-1.0.0.jar -cp target/test-classes -cp lib/jimfs-1.1.jar -cp lib/guava-18.0.jar --scan-class-path target/test-classes
 	touch $@
 
-install: ~/bin ~/bin/modulec ~/bin/modc
-
 ~/bin:
 	mkdir $@
 
@@ -47,5 +45,9 @@ install: ~/bin ~/bin/modulec ~/bin/modc
 	cp $< $@
 
 clean:
-	rm -f ~/bin/modulec
 	rm -rf target
+
+install: ~/bin ~/bin/modulec ~/bin/modc
+
+uninstall:
+	rm -f ~/bin/modulec

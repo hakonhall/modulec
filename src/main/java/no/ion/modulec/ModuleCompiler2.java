@@ -33,14 +33,14 @@ public class ModuleCompiler2 {
 
         var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre());
 
-        compilation.setOutputDirectory(options.topLevelOptions().work());
+        compilation.setBuildDirectory(options.topLevelOptions().buildDirectory());
         compilation.addOptions(options.topLevelOptions().options());
         compilation.modulePath().clear().addFrom(options.topLevelOptions().modulePath());
 
         for (var moduleOptions : options.moduleOptions()) {
             ModuleCompilationAndPackaging module = compilation.addModule();
             moduleOptions.destination().ifPresent(module::setClassOutputDirectory);
-            module.setJarPath(moduleOptions.jarFile().orElse(null));
+            module.setJarPath(moduleOptions.jarOutput().orElse(null));
             moduleOptions.mainClass().ifPresent(module::setMainClass);
             moduleOptions.manifest().ifPresent(module::addManifest);
             moduleOptions.moduleName().ifPresent(module::setName);
