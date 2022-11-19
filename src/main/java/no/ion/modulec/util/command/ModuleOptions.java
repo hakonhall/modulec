@@ -9,7 +9,7 @@ import java.util.Optional;
 public class ModuleOptions {
     private final TopLevelOptions topLevelOptions;
     private Path destination;
-    private Path jarFile;
+    private Path jarOutput;
     private String mainClass;
     private Path manifest;
     private String moduleName;
@@ -23,7 +23,7 @@ public class ModuleOptions {
 
     public Optional<Path> destination() { return Optional.ofNullable(destination); }
     public Optional<String> mainClass() { return Optional.ofNullable(mainClass); }
-    public Optional<Path> jarFile() { return Optional.ofNullable(jarFile); }
+    public Optional<Path> jarOutput() { return Optional.ofNullable(jarOutput); }
     public Optional<Path> manifest() { return Optional.ofNullable(manifest); }
     public Optional<String> moduleName() { return Optional.ofNullable(moduleName); }
     public List<Path> sources() { return sources; }
@@ -39,8 +39,8 @@ public class ModuleOptions {
         return this;
     }
 
-    public ModuleOptions setJarFile(Path jarFile) {
-        this.jarFile = jarFile;
+    public ModuleOptions setJarOutput(Path jarOutput) {
+        this.jarOutput = jarOutput;
         return this;
     }
 

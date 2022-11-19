@@ -12,16 +12,16 @@ import java.util.Optional;
 public class TopLevelOptions {
     private final ModulePath modulePath = new ModulePath();
     private ModuleDescriptor.Version version;
-    private Path work;
+    private Path buildDirectory;
     private String warnings = "all";
 
     public TopLevelOptions(FileSystem fileSystem) {
-        this.work = fileSystem.getPath("target");
+        this.buildDirectory = fileSystem.getPath("target");
     }
 
     public ModulePath modulePath() { return modulePath; }
     public Optional<ModuleDescriptor.Version> version() { return Optional.ofNullable(version); }
-    public Path work() { return work; }
+    public Path buildDirectory() { return buildDirectory; }
     public List<String> options() { return List.of("-Werror", "-Xlint:" + warnings); }
 
     public TopLevelOptions setModulePath(FileSystem fileSystem, String modulePath) {
@@ -34,8 +34,8 @@ public class TopLevelOptions {
         return this;
     }
 
-    public TopLevelOptions setWork(Path work) {
-        this.work = work;
+    public TopLevelOptions setBuildDirectory(Path buildDirectory) {
+        this.buildDirectory = buildDirectory;
         return this;
     }
 
@@ -46,7 +46,7 @@ public class TopLevelOptions {
     }
 
     public void validate() {
-        if (work == null)
-            throw new ArgumentException("Missing required --work option");
+        if (buildDirectory == null)
+            throw new ArgumentException("Missing required --build option");
     }
 }

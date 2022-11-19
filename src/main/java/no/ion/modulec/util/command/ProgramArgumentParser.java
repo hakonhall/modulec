@@ -32,6 +32,10 @@ public class ProgramArgumentParser {
         prepareForArgLoop();
         while (hasMoreArguments()) {
             switch (nextArg()) {
+                case "-b":
+                case "--build":
+                    options.topLevelOptions().setBuildDirectory(nextAsPathArgument());
+                    break;
                 case "-h":
                 case "--help":
                     String helpFile = "no/ion/modulec/modulec.usage";
@@ -53,10 +57,6 @@ public class ProgramArgumentParser {
                     options.topLevelOptions().setVersion(nextAsVersionArgument());
                     break;
                 case "-w":
-                case "--work":
-                    options.topLevelOptions().setWork(nextAsPathArgument());
-                    break;
-                case "-W":
                 case "--warnings":
                     options.topLevelOptions().setWarnings(nextOptionArgument());
                     break;
@@ -101,10 +101,6 @@ public class ProgramArgumentParser {
                 case "--destination":
                     moduleOptions.setDestination(nextAsPathArgument());
                     break;
-                case "-f":
-                case "--file":
-                    moduleOptions.setJarFile(nextAsPathArgument());
-                    break;
                 case "-e":
                 case "--main-class":
                     moduleOptions.setMainClass(nextAsJavaNameArgument());
@@ -112,6 +108,10 @@ public class ProgramArgumentParser {
                 case "-M":
                 case "--manifest":
                     moduleOptions.setManifest(nextAsPathArgument());
+                    break;
+                case "-o":
+                case "--output":
+                    moduleOptions.setJarOutput(nextAsPathArgument());
                     break;
                 case "-s":
                 case "--source":
