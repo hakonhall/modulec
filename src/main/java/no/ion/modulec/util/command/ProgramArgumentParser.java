@@ -36,6 +36,10 @@ public class ProgramArgumentParser {
                 case "--build":
                     options.topLevelOptions().setBuildDirectory(nextAsPathArgument());
                     break;
+                case "-g":
+                    // See also default section and handling of "-g:..."
+                    options.topLevelOptions().setDebug("");
+                    break;
                 case "-h":
                 case "--help":
                     String helpFile = "no/ion/modulec/modulec.usage";
@@ -75,7 +79,11 @@ public class ProgramArgumentParser {
                     break;
 
                 default:
-                    if (arg().startsWith("-")) {
+                    if (arg().startsWith("-g:")) {
+                        // See also handling of "-g"
+                        String suffix = arg().substring(3);
+                        options.topLevelOptions().setDebug(suffix);
+                    } else if (arg().startsWith("-")) {
                         throw new ArgumentException("Unknown option: " + arg());
                     } else {
                         throw new ArgumentException("Extraneous argument: " + arg());
