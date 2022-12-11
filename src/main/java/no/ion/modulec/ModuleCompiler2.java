@@ -1,10 +1,10 @@
 package no.ion.modulec;
 
-import no.ion.modulec.java.ModuleCompilationAndPackaging;
-import no.ion.modulec.java.ModuleCompiler;
-import no.ion.modulec.java.MultiModuleCompilationAndPackaging;
-import no.ion.modulec.java.MultiModuleCompilationAndPackagingResult;
-import no.ion.modulec.java.Release;
+import no.ion.modulec.compiler.multi.ModuleCompilationAndPackaging;
+import no.ion.modulec.compiler.multi.MultiModuleCompiler;
+import no.ion.modulec.compiler.multi.MultiModuleCompilationAndPackaging;
+import no.ion.modulec.compiler.multi.MultiModuleCompilationAndPackagingResult;
+import no.ion.modulec.compiler.Release;
 import no.ion.modulec.util.ModuleCompilerException;
 import no.ion.modulec.util.command.ArgumentException;
 import no.ion.modulec.util.command.Options;
@@ -50,7 +50,7 @@ public class ModuleCompiler2 {
             moduleOptions.resources().forEach(resourceDirectory -> module.addResources(resourceDirectory, toInclude));
         }
 
-        var compiler = new ModuleCompiler();
+        var compiler = new MultiModuleCompiler();
 
         MultiModuleCompilationAndPackagingResult result;
         try {

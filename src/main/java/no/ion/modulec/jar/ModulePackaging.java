@@ -1,4 +1,4 @@
-package no.ion.modulec.java;
+package no.ion.modulec.jar;
 
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.Path;
@@ -12,6 +12,7 @@ import java.util.Optional;
  */
 public class ModulePackaging {
     private final Path jarFile;
+    private final String action;
     private ModuleDescriptor.Version version = null;
     private final List<Include> includes = new ArrayList<>();
     /** null means no jar arg and get default manifest, empty mean --no-manifest, and otherwise --manifest FILE. */
@@ -21,11 +22,18 @@ public class ModulePackaging {
     /** The directory of the jarFile must exist. */
     public static ModulePackaging forCreatingJar(Path jarFile) {
         Objects.requireNonNull(jarFile, "jarFile cannot be null");
-        return new ModulePackaging(jarFile);
+        return new ModulePackaging(jarFile, "-c");
     }
 
-    private ModulePackaging(Path jarFile) {
+    /** The directory of the jarFile must exist. */
+    public static ModulePackaging forUpdatingJar(Path jarFile) {
+        Objects.requireNonNull(jarFile, "jarFile cannot be null");
+        return new ModulePackaging(jarFile, "-u");
+    }
+
+    private ModulePackaging(Path jarFile, String action) {
         this.jarFile = jarFile;
+        this.action = action;
     }
 
     public ModulePackaging setVersion(ModuleDescriptor.Version version) {
@@ -34,6 +42,10 @@ public class ModulePackaging {
     }
 
     public record Include(Path directory, List<Path> pathsRelativeDirectory) {}
+
+    public ModulePackaging addDirectoryTree(Path directory) {
+        return addFiles(directory, List.of(directory.getFileSystem().getPath(".")));
+    }
 
     public ModulePackaging addFiles(Path directory, List<Path> pathsRelativeDirectory) {
         Objects.requireNonNull(directory, "directory cannot be null");
@@ -55,6 +67,8 @@ public class ModulePackaging {
     }
 
     public Path jarFile() { return jarFile; }
+    /** One of -c or -u. */
+    public String action() { return action; }
     public ModuleDescriptor.Version version() { return version; }
     public List<Include> includes() { return List.copyOf(includes); }
     public Optional<Path> manifest() { return manifest; }

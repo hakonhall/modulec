@@ -1,14 +1,19 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler.multi;
+
+import no.ion.modulec.compiler.CompilationResult;
+import no.ion.modulec.jar.Jar;
+import no.ion.modulec.jar.ModulePackaging;
+import no.ion.modulec.jar.PackagingResult;
 
 import java.util.Map;
 import java.util.TreeMap;
 
-public class ModuleCompiler {
-    private final Javac javac = new Javac();
+public class MultiModuleCompiler {
+    private final Compiler compiler = new Compiler();
     private final Jar jar = new Jar();
 
     public MultiModuleCompilationAndPackagingResult make(MultiModuleCompilationAndPackaging job) {
-        CompilationResult cResult = javac.compile(job);
+        CompilationResult cResult = compiler.compile(job);
         if (!cResult.success())
             return new MultiModuleCompilationAndPackagingResult(cResult, Map.of());
 

@@ -1,9 +1,9 @@
-Usage: modulec [OPTION...] [--module [MODULE_OPTION...]]...
+Usage: modc [OPTION...] [--module [MODULE_OPTION...]]...
 Compile and package Java modules into modular JARs.
 
 Options:
   -b,--build BUILD         Build directory completely owned and managed by modc
-                           to speed up repeated builds, by default "target".
+                           speed up repeated builds, by default "target".
   -P,--module-path-entry MPATHENT...   Add MPATHENT to the module path.  It
                            must be a path to a modular JAR, or to an exploded
                            module, or to a directory of those.  Cannot contain
@@ -15,7 +15,7 @@ Options:
 
 Module options:
   -d,--destination DEST    Directory kept in sync with the intermediate class
-                           files, by default WORK/classes.
+                           files, by default BUILD/classes.
   -e,--main-class CLASS    The main class.
   -M,--manifest MANIFEST   Path to a manifest file.
   -m,--module              Same as -n/--module-name with a NAME that is read
@@ -39,7 +39,7 @@ Example:
   Compile two maven project at path pdir1 and pdir2 with a version 1.2.3, and
   set the main class for pdir2 to no.ion.example.Main, given
   pdir1/src/main/resources exists while pdir2/src/main/resources doesn't:
-      modulec -v 1.2.3 -w .modulec.work \
+      modulec -v 1.2.3 -b .modulec.work \
         -m -s pdir1/src/main/java -r pdir1/src/main/resources \
         -m -s pdir2/src/main/java
   If the module name in pdir1/src/main/java/module-info.java is p.dir.one and

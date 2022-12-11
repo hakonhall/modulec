@@ -1,4 +1,4 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler;
 
 import no.ion.modulec.file.TestDirectory;
 import org.junit.jupiter.api.Test;

@@ -11,10 +11,16 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding -->
   </properties>
 
   <dependencies>
+    <dependency>
+      <groupId>no.ion</groupId>
+      <artifactId>jhms</artifactId>
+      <version>3.0.0</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/lib/no.ion.jhms-3.0.0.jar</systemPath>
+    </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-api</artifactId>

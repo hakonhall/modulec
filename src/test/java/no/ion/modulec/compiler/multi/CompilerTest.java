@@ -1,5 +1,8 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler.multi;
 
+import no.ion.modulec.compiler.CompilationResult;
+import no.ion.modulec.compiler.ModulePath;
+import no.ion.modulec.compiler.Release;
 import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
 import no.ion.modulec.file.TestDirectory;
@@ -21,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class JavacTest {
-    private final Javac javac = new Javac();
+class CompilerTest {
+    private final Compiler compiler = new Compiler();
 
     @TempDir
     Path tempDir;
@@ -42,7 +45,7 @@ class JavacTest {
                          module m1 {
                          }
                          """;
-        assertEquals("m1", Javac.moduleNameOf("src/module-info.java", content, SourceVersion.latest()));
+        assertEquals("m1", Compiler.moduleNameOf("src/module-info.java", content, SourceVersion.latest()));
     }
 
     @Test
@@ -76,7 +79,7 @@ class JavacTest {
         compilation.addModule()
                 .addSourceDirectories(List.of(srcDir.path()))
                 .setClassOutputDirectory(destDir.path());
-        CompilationResult result = javac.compile(compilation);
+        CompilationResult result = compiler.compile(compilation);
 
         Optional<BasicAttributes> moduleInfoClassAttributes = destDir.resolve("module-info.class").readAttributesIfExists(true);
         assertTrue(moduleInfoClassAttributes.isPresent());
@@ -88,7 +91,7 @@ class JavacTest {
 
     @Test
     void compileTwoModulesWithMultipleSourceDirectories() {
-        TestDirectory.with(JavacTest.class, workDir -> {
+        TestDirectory.with(CompilerTest.class, workDir -> {
             makeTwoModulesWithMultiSources(workDir);
 
             var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre());
@@ -98,7 +101,7 @@ class JavacTest {
             compilation.addModule()
                     .addSourceDirectories(List.of(workDir.resolve("moduleB/src").path()))
                     .setClassOutputDirectory(workDir.resolve("moduleB/target").path());
-            CompilationResult result = javac.compile(compilation);
+            CompilationResult result = compiler.compile(compilation);
             assertTrue(result.success(), "Compilation failed: " + result.makeMessage());
             assertTrue(result.makeMessage().startsWith("OK\n"), "Bad message: " + result.makeMessage());
             assertEquals(0, result.diagnostics().size());
@@ -122,7 +125,7 @@ class JavacTest {
 
     @Test
     void compileSequentially() {
-        TestDirectory.with(JavacTest.class, workDir -> {
+        TestDirectory.with(CompilerTest.class, workDir -> {
             makeTwoModulesWithMultiSources(workDir);
 
             {
@@ -130,7 +133,7 @@ class JavacTest {
                 compilationA.addModule()
                         .addSourceDirectories(List.of(workDir.resolve("moduleA/src1").path(), workDir.resolve("moduleA/src2").path()))
                         .setClassOutputDirectory(workDir.resolve("moduleA/target").path());
-                CompilationResult resultA = javac.compile(compilationA);
+                CompilationResult resultA = compiler.compile(compilationA);
                 assertTrue(resultA.success(), "Compilation failed: " + resultA.makeMessage());
                 assertTrue(resultA.makeMessage().startsWith("OK\n"), "Bad message: " + resultA.makeMessage());
                 assertEquals(0, resultA.diagnostics().size());
@@ -147,7 +150,7 @@ class JavacTest {
                 compilationB.addModule()
                             .addSourceDirectories(List.of(workDir.resolve("moduleB/src").path()))
                             .setClassOutputDirectory(workDir.resolve("moduleB/target").path());
-                CompilationResult resultB = javac.compile(compilationB);
+                CompilationResult resultB = compiler.compile(compilationB);
 
                 assertTrue(resultB.success(), "Compilation failed: " + resultB.makeMessage());
                 assertTrue(resultB.makeMessage().startsWith("OK\n"), "Bad message: " + resultB.makeMessage());
@@ -238,7 +241,7 @@ class JavacTest {
         Pathname classes = workDir.resolve("classes");
 
         var compilation = new MultiModuleCompilationAndPackaging(Release.ofJre());
-        CompilationResult result = javac.compile(compilation);
+        CompilationResult result = compiler.compile(compilation);
         // The "no source files" is not informative if no modules were specified
         //assertEquals("error: no source files", result.makeMessage());
         assertTrue(result.makeMessage().startsWith("error: no modules"), result.makeMessage());
@@ -247,7 +250,7 @@ class JavacTest {
                    .addSourceDirectories(List.of(src.path()))
                    .setClassOutputDirectory(classes.path());
         src.makeDirectories();
-        result = javac.compile(compilation);
+        result = compiler.compile(compilation);
         assertTrue(result.makeMessage().startsWith("error: no source files found in /"), result.makeMessage());
 
         src.resolve("module-info.java")
@@ -256,7 +259,7 @@ class JavacTest {
                            exports a.example.api;
                          }
                          """);
-        result = javac.compile(compilation);
+        result = compiler.compile(compilation);
         String message = result.makeMessage();
         assertTrue(message.contains("""
                              src/module-info.java:2: error: package is empty or does not exist: a.example.api

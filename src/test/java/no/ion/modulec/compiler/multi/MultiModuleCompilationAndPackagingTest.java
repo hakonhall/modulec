@@ -1,5 +1,7 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler.multi;
 
+import no.ion.modulec.compiler.Release;
+import no.ion.modulec.compiler.SourceWriter;
 import no.ion.modulec.file.FileMode;
 import no.ion.modulec.file.Pathname;
 import no.ion.modulec.file.TemporaryDirectory;
@@ -19,7 +21,7 @@ public class MultiModuleCompilationAndPackagingTest {
     private final SourceWriter srcA = SourceWriter.rootedAt(workDirectory.resolve("srcA"));
     private final SourceWriter srcB = SourceWriter.rootedAt(workDirectory.resolve("srcB"));
     private final SourceWriter srcC = SourceWriter.rootedAt(workDirectory.resolve("srcC"));
-    private final ModuleCompiler compiler = new ModuleCompiler();
+    private final MultiModuleCompiler compiler = new MultiModuleCompiler();
 
     @AfterEach
     void tearDown() {

@@ -1,4 +1,4 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler;
 
 import javax.tools.JavaFileObject;
 import java.util.Objects;

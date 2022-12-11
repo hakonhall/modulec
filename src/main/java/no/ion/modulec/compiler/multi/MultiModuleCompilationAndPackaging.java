@@ -1,4 +1,7 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler.multi;
+
+import no.ion.modulec.compiler.ModulePath;
+import no.ion.modulec.compiler.Release;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
