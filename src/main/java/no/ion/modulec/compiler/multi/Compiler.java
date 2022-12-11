@@ -1,7 +1,10 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler.multi;
 
+import no.ion.modulec.compiler.CompilationResult;
+import no.ion.modulec.compiler.Diagnostic;
 import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
+import no.ion.modulec.file.SourceDirectory;
 import no.ion.modulec.file.TemporaryDirectory;
 import no.ion.modulec.util.ModuleCompilerException;
 
@@ -28,13 +31,13 @@ import java.util.stream.Collectors;
 
 import static no.ion.modulec.util.Exceptions.uncheckIO;
 
-public class Javac {
+public class Compiler {
     private static final String OWNER_FILENAME = "owner";
     private static final String OWNER_MAGIC = "no.ion.modulec";
 
     private final JavaCompiler compiler;
 
-    public Javac() { this.compiler = getSystemJavaCompiler(); }
+    public Compiler() { this.compiler = getSystemJavaCompiler(); }
 
     public CompilationResult compile(MultiModuleCompilationAndPackaging compilation) {
         long startNanos = System.nanoTime();
@@ -104,9 +107,7 @@ public class Javac {
 
                     Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(sourcePaths);
 
-                    var options = new ArrayList<String>();
-
-                    options.addAll(compilation.options());
+                    var options = new ArrayList<String>(compilation.options());
 
                     if (!compilation.release().matchesJreVersion()) {
                         options.add("--release");
@@ -161,24 +162,15 @@ public class Javac {
 
         String out = writer.toString();
         var duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new CompilationResult(success, duration, diagnostics, out, exception);
+        return new CompilationResult(success, duration, diagnostics, out, null, exception);
     }
 
-    private List<Path> sourceFiles(List<Path> sourceDirectories) {
+    private static List<Path> sourceFiles(List<Path> sourceDirectories) {
         return sourceDirectories.stream()
-                .map(Pathname::of)
-                .flatMap(pathname -> {
-                    if (!pathname.isDirectory())
-                        throw new ModuleCompilerException("No such source directory: " + pathname);
-
-                    return pathname.find(true,
-                                         (subpathname, attribute) ->
-                                                 attribute.isFile() && subpathname.filename().endsWith(".java") ?
-                                                         Optional.of(subpathname.path()) :
-                                                         Optional.empty())
-                                   .stream();
-                })
-                .collect(Collectors.toList());
+                                .map(Pathname::of)
+                                .map(SourceDirectory::resolveSourceDirectory)
+                                .flatMap(List::stream)
+                                .collect(Collectors.toList());
     }
 
     private Pathname resolveModuleClassesDirectory(Optional<Path> moduleClassOutputDirectory,
@@ -204,7 +196,7 @@ public class Javac {
     private BuildDirectory resolveBuildDirectory(Path buildDirectoryPath) {
         if (buildDirectoryPath == null) {
             // Use a temporary build directory
-            Pathname buildDirectory = Pathname.makeTmpdir(Javac.class.getName() + ".", "", null).directory();
+            Pathname buildDirectory = Pathname.makeTmpdir(Compiler.class.getName() + ".", "", null).directory();
             buildDirectory.resolve(OWNER_FILENAME).writeUtf8(OWNER_MAGIC);
             return new BuildDirectory(buildDirectory, true);
         } else {

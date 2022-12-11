@@ -1,6 +1,6 @@
 package no.ion.modulec.util.command;
 
-import no.ion.modulec.java.ModulePath;
+import no.ion.modulec.compiler.ModulePath;
 
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.FileSystem;

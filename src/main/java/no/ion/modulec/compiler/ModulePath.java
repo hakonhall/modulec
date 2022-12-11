@@ -1,14 +1,14 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler;
 
 import java.nio.file.FileSystem;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
- * Represents the --module-path/-p: A colon-separated list of paths:
+ * Represents the module path (--module-path/-p): A colon-separated list of paths:
  *
  * <ul>
  *     <li>A path to a packaged module: a modular JAR file ending in .jar.</li>
@@ -28,8 +28,9 @@ public class ModulePath {
         return this;
     }
 
-    public void addFrom(ModulePath that) {
+    public ModulePath addFrom(ModulePath that) {
         entries.addAll(that.entries);
+        return this;
     }
 
     /** A packaged module aka a modular JAR. */
@@ -59,7 +60,7 @@ public class ModulePath {
     }
 
     public ModulePath addFromColonSeparatedString(FileSystem fileSystem, String modulePath) {
-        Stream.of(modulePath.split(":", -1)).forEach(path -> entries.add(new Entry(fileSystem.getPath(path), path)));
+        Arrays.stream(modulePath.split(":", -1)).forEach(path -> entries.add(new Entry(fileSystem.getPath(path), path)));
         return this;
     }
 

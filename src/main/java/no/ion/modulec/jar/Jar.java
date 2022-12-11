@@ -1,9 +1,11 @@
-package no.ion.modulec.java;
+package no.ion.modulec.jar;
 
+import no.ion.modulec.file.Pathname;
 import no.ion.modulec.util.ModuleCompilerException;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.module.ModuleDescriptor;
 import java.util.ArrayList;
 import java.util.spi.ToolProvider;
 
@@ -15,12 +17,14 @@ public class Jar {
 
     public PackagingResult pack(ModulePackaging packaging) {
         var arguments = new ArrayList<String>();
-        arguments.add("-c"); // --create
+        arguments.add(packaging.action());
         arguments.add("-f"); // --file
         arguments.add(packaging.jarFile().toString());
-        if (packaging.version() != null) {
+
+        ModuleDescriptor.Version version = packaging.version();
+        if (version != null) {
             arguments.add("--module-version");
-            arguments.add(packaging.version().toString());
+            arguments.add(version.toString());
         }
 
         // With --no-manifest, jar(1) ignores --manifest and --main-class.
@@ -55,6 +59,6 @@ public class Jar {
         printWriter.flush(); // also flushes writer
         String out = writer.toString();
         printWriter.close(); // also closes writer
-        return new PackagingResult(success, out);
+        return new PackagingResult(success, out, Pathname.of(packaging.jarFile()));
     }
 }

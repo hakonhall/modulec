@@ -1,5 +1,6 @@
-package no.ion.modulec.java;
+package no.ion.modulec.compiler;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -7,16 +8,16 @@ import java.util.Objects;
 import static no.ion.modulec.util.Exceptions.uncheckIO;
 
 public record CompilationResult(boolean success, Duration duration, List<Diagnostic> diagnostics, String out,
-                                RuntimeException exception) {
+                                Path destination, RuntimeException exception) {
     public CompilationResult {
         Objects.requireNonNull(duration, "duration cannot be null");
-        Objects.requireNonNull(duration, "diagnostics cannot be null");
-        Objects.requireNonNull(duration, "out cannot be null");
+        Objects.requireNonNull(diagnostics, "diagnostics cannot be null");
+        Objects.requireNonNull(out, "out cannot be null");
     }
 
     public static CompilationResult ofError(long startNanos, String message) {
         Duration duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new CompilationResult(false, duration, List.of(), message, null);
+        return new CompilationResult(false, duration, List.of(), message, null, null);
     }
 
     /**
@@ -73,7 +74,7 @@ public record CompilationResult(boolean success, Duration duration, List<Diagnos
             buffer.append(out);
 
         buffer.append(success ? "OK\n" : "FAILED\n");
-        buffer.append(String.format("Completed in %.3fs\n", duration.toNanos() / 1000_000.0));
+        buffer.append(String.format("Completed in %.3fs\n", duration.toNanos() / 1000_000_000.0));
         return buffer.toString();
     }
 }

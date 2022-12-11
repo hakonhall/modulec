@@ -1,7 +1,10 @@
 package no.ion.modulec.file;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.CopyOption;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystem;
@@ -40,8 +43,12 @@ public class Pathname {
     /** Returns the java.io.tmpdir directory in the default file system. */
     public static Pathname defaultTemporaryDirectory() { return TMPDIR; }
 
+    public static Pathname of(FileSystem fileSystem, String first, String... rest) {
+        return new Pathname(fileSystem.getPath(first, rest));
+    }
     public static Pathname of(Path path) { return new Pathname(path); }
-    public Pathname(Path path) { this.path = path; }
+
+    private Pathname(Path path) { this.path = path; }
 
     public Pathname parent() {
         Path parent = path.getParent();
@@ -100,7 +107,7 @@ public class Pathname {
         return false;
     }
 
-    /** For each entry in this directory, invoke the callback with a Pathname of this.resolve(filename). */
+    /** For each entry in this directory, excluding . and .., invoke the callback with a Pathname of this.resolve(filename). */
     public Pathname forEachDirectoryEntry(Consumer<Pathname> callback) {
         DirectoryStream<Path> directoryStream = uncheckIO(() -> Files.newDirectoryStream(path));
         try {
@@ -151,9 +158,19 @@ public class Pathname {
         return result;
     }
 
-    public Pathname makeDirectory() {
-        uncheckIO(() -> Files.createDirectory(path));
-        return this;
+    /** Returns true if the directory was created, false if it already existed. */
+    public boolean makeDirectory() {
+        try {
+            Files.createDirectory(path);
+        } catch (FileAlreadyExistsException e) {
+            if (isDirectory())
+                return false;
+            throw new UncheckedIOException(e);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+
+        return true;
     }
 
     public Pathname makeDirectories() {
@@ -376,6 +393,38 @@ public class Pathname {
     public Pathname lchown_gid(int gid) {
         uncheckIO(() -> Files.setAttribute(path, "unix:gid", gid, LinkOption.NOFOLLOW_LINKS));
         return this;
+    }
+
+    /**
+     * Copy this to target.
+     *
+     * @param options {@link java.nio.file.StandardCopyOption#COPY_ATTRIBUTES StandardCopyOption.COPY_ATTRIBUTES},
+     *                {@link LinkOption#NOFOLLOW_LINKS},
+     *                {@link java.nio.file.StandardCopyOption#REPLACE_EXISTING StandardCopyOption.REPLACE_EXISTING}.
+     * @throws FileAlreadyExistsException if target exists and the
+     *                                    {@link java.nio.file.StandardCopyOption#REPLACE_EXISTING REPLACE_EXISTING}
+     *                                    option has not been specified.
+     */
+    public Pathname copyTo(Pathname target, CopyOption... options) { return copyTo(target.path, options); }
+
+    public Pathname copyTo(Path target, CopyOption... options) {
+        uncheckIO(() -> Files.copy(path, target, options));
+        return this;
+    }
+
+    public Pathname copyTo(String target, CopyOption... options) { return copyTo(fileSystem().getPath(target), options); }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Pathname pathname = (Pathname) o;
+        return path.equals(pathname.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(path);
     }
 
     /** Converts a boolean followSymlinks to an array of LinkOption. */
