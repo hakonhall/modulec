@@ -4,8 +4,8 @@ import no.ion.modulec.UserErrorException;
 
 import java.util.Optional;
 
-public class DestinationDirectory {
-    private final Pathname destination;
+public class OutputDirectory {
+    private final Pathname out;
     private final Owner owner;
 
     private Pathname outputClassDirectory = null;
@@ -13,6 +13,7 @@ public class DestinationDirectory {
     private String jarFilename = null;
     private Pathname jar = null;
     private Pathname testJar = null;
+    private Pathname programDirectory = null;
 
     public enum Owner {
         COMPILER_SINGLE("compiler.single");
@@ -24,22 +25,22 @@ public class DestinationDirectory {
         }
     }
 
-    /** Create the destination directory if it does not already exist, throwing UserErrorException if invalid. */
-    public static DestinationDirectory create(Pathname directory, Owner owner) {
-        return new DestinationDirectory(directory, owner).create();
+    /** Create the output directory if it does not already exist, throwing UserErrorException if invalid. */
+    public static OutputDirectory create(Pathname directory, Owner owner) {
+        return new OutputDirectory(directory, owner).create();
     }
 
-    private static Pathname ownerPathname(Pathname destinationDirectory) { return destinationDirectory.resolve("owner"); }
-
-    private DestinationDirectory(Pathname destination, Owner owner) {
-        this.destination = destination;
+    private OutputDirectory(Pathname out, Owner owner) {
+        this.out = out;
         this.owner = owner;
     }
+
+    private Pathname ownerPathname() { return out.resolve("owner"); }
 
     /** Creates the output directory for the class files from the compilation of the source files, if not already done. */
     public Pathname outputClassDirectory() {
         if (outputClassDirectory == null) {
-            outputClassDirectory = destination.resolve("classes");
+            outputClassDirectory = out.resolve("classes");
             outputClassDirectory.makeDirectory();
         }
         return outputClassDirectory;
@@ -48,7 +49,7 @@ public class DestinationDirectory {
     /** Creates the output directory for the class files from the compilation of the test source files, if not already done. */
     public Pathname outputTestClassDirectory() {
         if (outputTestClassDirectory == null) {
-            outputTestClassDirectory = destination.resolve("test/classes");
+            outputTestClassDirectory = out.resolve("test/classes");
             outputTestClassDirectory.makeDirectories();
         }
         return outputTestClassDirectory;
@@ -67,7 +68,7 @@ public class DestinationDirectory {
         if (jar == null) {
             if (jarFilename == null)
                 throw new IllegalStateException("jar filename not set");
-            jar = destination.resolve(jarFilename);
+            jar = out.resolve(jarFilename);
         }
         return jar;
     }
@@ -77,31 +78,41 @@ public class DestinationDirectory {
         if (testJar == null) {
             if (jarFilename == null)
                 throw new IllegalStateException("jar filename not set");
-            testJar = destination.resolve("test").resolve(jarFilename);
-            testJar.makeParentDirectories();
+            Pathname testDirectory = out.resolve("test");
+            testDirectory.makeDirectories();
+            testJar = testDirectory.resolve(jarFilename);
         }
         return testJar;
     }
 
-    private DestinationDirectory create() {
-        if (!destination.exists()) {
-            destination.makeDirectories();
-            ownerPathname(destination).writeUtf8(owner.magic);
+    /** Creates the program directory if it does not exist yet. Returns the program directory. */
+    public Pathname programDirectory() {
+        if (programDirectory == null) {
+            programDirectory = out.resolve("bin");
+            programDirectory.makeDirectories();
+        }
+        return programDirectory;
+    }
+
+    private OutputDirectory create() {
+        if (!out.exists()) {
+            out.makeDirectories();
+            ownerPathname().writeUtf8(owner.magic);
             return this;
         }
 
-        if (!destination.isDirectory())
-            throw new UserErrorException("Destination is not a directory: " + destination);
+        if (!out.isDirectory())
+            throw new UserErrorException("Output is not a directory: " + out);
 
-        if (destination.isEmptyDirectory()) {
-            ownerPathname(destination).writeUtf8(owner.magic);
+        if (out.isEmptyDirectory()) {
+            ownerPathname().writeUtf8(owner.magic);
             return this;
         }
 
-        Optional<String> magic = ownerPathname(destination).readUtf8IfExists();
+        Optional<String> magic = ownerPathname().readUtf8IfExists();
         if (magic.isPresent() && magic.get().equals(owner.magic))
             return this;
 
-        throw new UserErrorException("Refuse to use non-empty destination directory: " + destination);
+        throw new UserErrorException("Refuse to use non-empty output directory: " + out);
     }
 }

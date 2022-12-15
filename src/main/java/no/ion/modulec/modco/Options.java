@@ -3,6 +3,7 @@ package no.ion.modulec.modco;
 import no.ion.modulec.UsageException;
 import no.ion.modulec.UserErrorException;
 import no.ion.modulec.compiler.ModulePath;
+import no.ion.modulec.compiler.Release;
 import no.ion.modulec.compiler.single.ModuleCompiler;
 import no.ion.modulec.file.Pathname;
 
@@ -10,6 +11,7 @@ import java.lang.module.ModuleDescriptor;
 import java.nio.file.FileSystem;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class Options {
 
@@ -22,30 +24,63 @@ public class Options {
     public ModuleCompiler.MakeParams params() { return params; }
 
     public static Options parse(FileSystem fileSystem, String... args) {
-        Pathname destination = Pathname.of(fileSystem.getPath("out"));
+        String debug = null;
+        Pathname out = Pathname.of(fileSystem.getPath("out"));
+        String mainClass = null;
         ModulePath modulePath = null;
+        List<ProgramSpec> programs = new ArrayList<>();
+        Release release = Release.ofJre();
         Pathname sourceDirectory = null;
         List<Pathname> resourceDirectories = new ArrayList<>();
         Pathname testModuleInfo = null;
         Pathname testSourceDirectory = null;
         List<Pathname> testResourceDirectories = new ArrayList<>();
+        boolean verbose = false;
         ModuleDescriptor.Version version = null;
+        String warnings = "all";
 
         var arguments = new ProgramArgumentIterator(fileSystem, args);
         for (; !arguments.atEnd(); arguments.next()) {
             switch (arguments.arg()) {
-                case "-d":
-                case "--destination":
-                case "-o":
-                case "--output":
-                    destination = arguments.getOptionValueAsPathname();
+                case "-g":
+                case "--debug":
+                    debug = "";
                     continue;
                 case "-h":
                 case "--help":
                     throw UsageException.fromResource("no/ion/modulec/modco.usage");
+                case "-e":
+                case "--main-class":
+                    mainClass = arguments.getOptionValueString();
+                    continue;
                 case "-p":
                 case "--module-path":
                     modulePath = new ModulePath().addFromColonSeparatedString(fileSystem, arguments.getOptionValueString());
+                    continue;
+                case "-o":
+                case "--output":
+                    out = arguments.getOptionValueAsPathname();
+                    continue;
+                case "-P":
+                case "--program":
+                    String value = arguments.getOptionValueString();
+                    int equalsIndex = value.indexOf('=');
+                    if (equalsIndex == -1)
+                        throw new UserErrorException("Invalid --program argument");
+                    String filename = value.substring(0, equalsIndex);
+                    String programMainClass = value.substring(equalsIndex + 1);
+                    if (filename.isEmpty() || filename.equals(".") || filename.equals("..") || filename.indexOf('/') != -1)
+                        throw new UserErrorException("Invalid program filename");
+                    programs.add(new ProgramSpec(filename, programMainClass));
+                    continue;
+                case "-l":
+                case "--release":
+                    int releaseInt = arguments.getOptionValueInt();
+                    try {
+                        release = Release.fromFeatureReleaseCounter(releaseInt);
+                    } catch (IllegalArgumentException e) {
+                        throw new UserErrorException(e.getMessage());
+                    }
                     continue;
                 case "-r":
                 case "--resources":
@@ -55,17 +90,25 @@ public class Options {
                 case "--source":
                     sourceDirectory = arguments.getOptionValueAsExistingDirectory();
                     continue;
-                case "-T":
+                case "-I":
                 case "--test-module-info":
                     testModuleInfo = arguments.getOptionValueAsPathname();
+                    if (!testModuleInfo.filename().equals("module-info.java"))
+                        throw new UserErrorException("--test-module-info must specify a module-info.java file");
+                    if (!testModuleInfo.isFile())
+                        throw new UserErrorException("No such file: " + testModuleInfo);
                     continue;
-                case "-u":
+                case "-R":
                 case "--test-resources":
                     testResourceDirectories.add(arguments.getOptionValueAsExistingDirectory());
                     continue;
                 case "-t":
                 case "--test-source":
                     testSourceDirectory = arguments.getOptionValueAsExistingDirectory();
+                    continue;
+                case "-b":
+                case "--verbose":
+                    verbose = true;
                     continue;
                 case "-v":
                 case "--version":
@@ -75,6 +118,10 @@ public class Options {
                     } catch (IllegalArgumentException __) {
                         throw new UserErrorException("Invalid module version: '" + versionString + "'");
                     }
+                    continue;
+                case "-w":
+                case "--warnings":
+                    warnings = arguments.getOptionValueString();
                     continue;
                 default:
                     if (arguments.arg().startsWith("-"))
@@ -86,9 +133,30 @@ public class Options {
 
         ModuleCompiler.MakeParams params = new ModuleCompiler.MakeParams(fileSystem);
 
+        if (debug != null)
+            params.setDebug(debug);
+
+        params.setRelease(release);
+
+        if (mainClass != null) {
+            if (!release.isName(mainClass))
+                throw new UserErrorException("Invalid Main class name: '" + mainClass + "'");
+            params.setMainClass(mainClass);
+        }
+
+        for (ProgramSpec program : programs) {
+            if (!release.isName(program.mainClass()))
+                throw new UserErrorException("Not a valid main class: '" + program.mainClass() + "'");
+        }
+        programs.forEach(params::addProgram);
+
+        params.setVerbose(verbose);
+
         if (version == null)
             throw new UserErrorException("Missing required option '--version'");
         params.setVersion(version);
+
+        params.setWarnings(warnings.isEmpty() ? Optional.empty() : Optional.of(warnings));
 
         // Maven layout
         if (sourceDirectory == null) {
@@ -146,18 +214,15 @@ public class Options {
             testResourceDirectories.forEach(params::addTestResourceDirectory);
         }
 
-        if (destination == null)
-            destination = Pathname.of(fileSystem, "out");
-        params.setDestination(destination);
+        if (out == null)
+            out = Pathname.of(fileSystem, "out");
+        params.setOut(out);
 
         if (modulePath != null)
             params.addToModulePath(modulePath);
 
-        if (testModuleInfo != null) {
-            if (!testModuleInfo.isFile())
-                throw new UserErrorException("No such file: " + testModuleInfo);
+        if (testModuleInfo != null)
             params.setTestModuleInfo(testModuleInfo);
-        }
 
         return new Options(params);
     }

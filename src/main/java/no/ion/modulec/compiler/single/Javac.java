@@ -41,14 +41,17 @@ class Javac {
     }
 
     static class CompileParams {
+        private Optional<String> debug = Optional.empty();
         private Pathname classDirectory = null;
         private ModulePath modulePath = new ModulePath();
         private Pathname moduleInfo = null;
         private final List<String> options = new ArrayList<>();
         private final List<CompileParams.Patch> patches = new ArrayList<>();
+        private Release release = Release.ofJre();
         private Pathname sourceDirectory = null;
         private boolean verbose;
         private ModuleDescriptor.Version version = null;
+        private Optional<String> warnings = Optional.of("all");
 
         record Patch(String moduleName, Pathname modularJarPathname) {}
 
@@ -57,6 +60,12 @@ class Javac {
         /** The directory must exist. */
         CompileParams setClassDirectory(Pathname classDirectory) {
             this.classDirectory = Objects.requireNonNull(classDirectory, "classDirectory cannot be null");
+            return this;
+        }
+
+        CompileParams setDebug(Optional<String> debug) {
+            Objects.requireNonNull(debug, "debug cannot be null");
+            this.debug = debug;
             return this;
         }
 
@@ -76,6 +85,11 @@ class Javac {
             return this;
         }
 
+        CompileParams setRelease(Release release) {
+            this.release = Objects.requireNonNull(release, "release cannot be null");
+            return this;
+        }
+
         CompileParams setSourceDirectory(Pathname sourceDirectory) {
             this.sourceDirectory = Objects.requireNonNull(sourceDirectory, "sourceDirectory cannot be null");
             return this;
@@ -91,20 +105,27 @@ class Javac {
             return this;
         }
 
+        CompileParams setWarnings(Optional<String> warnings) {
+            this.warnings = Objects.requireNonNull(warnings, "warnings cannot be null");
+            return this;
+        }
+
+        Optional<String> debug() { return debug; }
         Pathname sourceDirectory() { return sourceDirectory; }
         Pathname moduleInfo() { return moduleInfo; }
         ModulePath mutableModulePath() { return modulePath; }
         Pathname classDirectory() { return classDirectory; }
-        ModuleDescriptor.Version version() { return version; }
         List<CompileParams.Patch> patchedModules() { return List.copyOf(patches); }
+        Release release() { return release; }
+        boolean verbose() { return verbose; }
+        ModuleDescriptor.Version version() { return version; }
+        Optional<String> warnings() { return warnings; }
 
         // TODO: A. Wire these to modco, B. wire all modco options to here, C. validate these in SingleModuleCompilation,
         // including patchModules moduleName isName() from release().sourceVersion.
         Charset charset() { return Charset.defaultCharset(); }
         Locale locale() { return Locale.getDefault(); }
         List<String> options() { return options; }
-        Release release() { return Release.ofJre(); }
-        boolean verbose() { return verbose; }
     }
 
     CompilationResult compile(CompileParams compilation) {
@@ -129,13 +150,21 @@ class Javac {
 
             var options = new ArrayList<String>(compilation.options());
 
-            // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
-            //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
-            compilation.patchedModules()
-                       .forEach(patch -> {
-                           options.add("--patch-module");
-                           options.add(patch.moduleName() + "=" + patch.modularJarPathname());
-                       });
+            compilation.warnings().ifPresent(warnings -> {
+                if (warnings.equals("all")) {
+                    options.add("-Xlint");
+                } else {
+                    options.add("-Xlint:" + warnings);
+                }
+            });
+
+            compilation.debug().ifPresent(debug -> {
+                if (debug.equals("")) {
+                    options.add("-g");
+                } else {
+                    options.add("-g:" + debug);
+                }
+            });
 
             if (!compilation.release().matchesJreVersion()) {
                 options.add("--release");
@@ -147,6 +176,14 @@ class Javac {
                 throw new ModuleCompilerException("Missing module version");
             options.add("--module-version");
             options.add(version.toString());
+
+            // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
+            //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
+            compilation.patchedModules()
+                       .forEach(patch -> {
+                           options.add("--patch-module");
+                           options.add(patch.moduleName() + "=" + patch.modularJarPathname());
+                       });
 
             // Avoid generating class files for implicitly referenced files
             options.add("-implicit:none");

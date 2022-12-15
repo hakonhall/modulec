@@ -16,7 +16,7 @@ public class Release {
     }
 
     /** Returns a release based on the Java SE feature release counter, e.g. 9, 11, and 17.  Formerly major version. */
-    public static Release fromFeatureReleaseCounter(int release) {
+    public static Release fromFeatureReleaseCounter(int release) throws IllegalArgumentException {
         final SourceVersion sourceVersion;
         try {
             sourceVersion = SourceVersion.valueOf("RELEASE_" + release);
@@ -42,7 +42,8 @@ public class Release {
     }
 
     public int releaseInt() { return release; }
-    public SourceVersion sourceVersion() { return sourceVersion; }
+    /** Returns {@code SourceVersion.isName(name, this.sourceVersion)}. */
+    public boolean isName(String name) { return SourceVersion.isName(name, sourceVersion); }
 
     /** Whether the release matches the version of the JRE. */
     public boolean matchesJreVersion() {

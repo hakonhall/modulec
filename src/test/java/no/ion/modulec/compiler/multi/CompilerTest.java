@@ -10,7 +10,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import javax.lang.model.SourceVersion;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -45,7 +44,7 @@ class CompilerTest {
                          module m1 {
                          }
                          """;
-        assertEquals("m1", Compiler.moduleNameOf("src/module-info.java", content, SourceVersion.latest()));
+        assertEquals("m1", Compiler.moduleNameOf("src/module-info.java", content, Release.ofJre()));
     }
 
     @Test

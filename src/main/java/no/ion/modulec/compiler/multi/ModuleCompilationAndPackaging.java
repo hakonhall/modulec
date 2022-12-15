@@ -5,7 +5,6 @@ import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
 import no.ion.modulec.util.ModuleCompilerException;
 
-import javax.lang.model.SourceVersion;
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -37,7 +36,7 @@ public class ModuleCompilationAndPackaging {
     }
 
     public ModuleCompilationAndPackaging setName(String name) {
-        if (!SourceVersion.isName(name, parent.release().sourceVersion()))
+        if (!parent.release().isName(name))
             throw new ModuleCompilerException("Invalid module name: " + name);
         this.name = name;
         return this;
@@ -84,7 +83,7 @@ public class ModuleCompilationAndPackaging {
 
     public ModuleCompilationAndPackaging setMainClass(String mainClass) {
         Objects.requireNonNull(mainClass, "mainClass cannot be null");
-        if (!SourceVersion.isName(mainClass, parent.release().sourceVersion()))
+        if (!parent.release().isName(mainClass))
             throw new IllegalArgumentException("Not a valid class name: " + mainClass);
         this.mainClass = mainClass;
         return this;

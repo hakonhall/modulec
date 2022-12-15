@@ -1,22 +1,28 @@
 Usage: modco [OPTION...]
-Compile, package, and JUnit 5 test a module.
+Java module compiler.
+
+Compiles a Java module and packages it as a modular JAR at
+OUT/MODULE@VERSION.jar.  Compiles JUnit 5 tests, packages a test modular JAR,
+and runs the tests.  Creates program(s) with --program.
+
+With --program N=MC, a Linux specific program is written to OUT/bin/N that will
+launch the module as a Java Hybrid Module System application with MC as the
+main class.  The program requires java in PATH, or JAVA_HOME being set.
 
 Options:
-  -d,--destination DEST    Destination directory for the modular JAR and more,
-                           completely owned and managed by modco to speed up
-                           repeated builds [out].
-  -e,--main-class CLASS    The main class.
-  -j,--java ARG            Pass ARG to modco java invocation.
-  -J,--javac ARG           Pass ARG to javac invocations.
-  -m,--manifest MANIFEST   Path to a manifest file.
-  -o,--output OUT          Output directory for the modular JAR and more,
-                           completely owned and managed by modco to speed up
-                           repeated builds [out].
-  -p,--module-path MPATH   Sets the module path [mod].
-  -r,--resource RSRC...    Include directory in JAR [src/main/resources].
-  -s,--source SRC          Source directory [src/main/java, src].
-  -u,--test-resource TR... Include directory in test JAR [src/test/resources].
-  -t,--test-source TS      Test source directory [src/test/java, test].
-  -T,--test-module-info TM module-info.java for the test module.
-  -v,--version VERSION     The module version.
-  -w,--warnings LINT       Same as -Xlint:LINT, by default "all".
+  -g,--debug                Same as javac -g.
+  -e,--main-class MCLASS    Sets the main class of the module.
+  -p,--module-path MPATH    Sets the module path [mod].
+  -o,--output OUT           Output directory [out].
+  -S,--no-source            Disable source compilation and packaging.
+  -T,--no-test-source       Disable test compilation, packaging, and running.
+  -P,--program N=CLASS      Create a program named N with main class CLASS.
+  -l,--release RELEASE      Compile for the given Java release.
+  -r,--resource R...        Include directory in JAR [src/main/resources].
+  -s,--source S             Source directory [src/main/java].
+  -I,--test-module-info TMI Path to module-info.java for the test module.
+  -R,--test-resource TR...  Include directory in test JAR [src/test/resources].
+  -t,--test-source TS       Test source directory [src/test/java].
+  -b,--verbose              Print command-line equivalents and more.
+  -v,--version VERSION      The module version.
+  -w,--warnings LINT        Same as -Xlint:LINT, by default "all". "" disables.
