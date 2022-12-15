@@ -2,13 +2,13 @@ package no.ion.modulec.compiler.multi;
 
 import no.ion.modulec.compiler.CompilationResult;
 import no.ion.modulec.compiler.Diagnostic;
+import no.ion.modulec.compiler.Release;
 import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
 import no.ion.modulec.file.SourceDirectory;
 import no.ion.modulec.file.TemporaryDirectory;
 import no.ion.modulec.util.ModuleCompilerException;
 
-import javax.lang.model.SourceVersion;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
@@ -82,7 +82,7 @@ public class Compiler {
 
                         sourcePaths.addAll(moduleSourcePaths);
 
-                        String moduleName = resolveModuleName(module.name().orElse(null), module.sourceDirectories(), compilation.release().sourceVersion());
+                        String moduleName = resolveModuleName(module.name().orElse(null), module.sourceDirectories(), compilation.release());
                         if (!moduleNames.add(moduleName))
                             return CompilationResult.ofError(startNanos, "error: module added twice: " + moduleName + "\n");
                         module.setName(moduleName);
@@ -230,7 +230,7 @@ public class Compiler {
 
     private static final Pattern MODULE_PATTERN = Pattern.compile("^ *(open +)?module +([a-zA-Z0-9_.]+)", Pattern.MULTILINE);
 
-    private String resolveModuleName(String moduleName, List<Path> sources, SourceVersion release) {
+    private String resolveModuleName(String moduleName, List<Path> sources, Release release) {
         if (moduleName != null)
             return moduleName;
         String module = null;
@@ -251,12 +251,12 @@ public class Compiler {
     }
 
     /** TODO: Actually parse the module-info.java with our compiler. */
-    static String moduleNameOf(String moduleInfoJavaPathname, String moduleInfoContent, SourceVersion release) {
+    static String moduleNameOf(String moduleInfoJavaPathname, String moduleInfoContent, Release release) {
         Matcher matcher = MODULE_PATTERN.matcher(moduleInfoContent);
         if (!matcher.find())
             throw new ModuleCompilerException("Failed to find the module name in " + moduleInfoJavaPathname);
         String module = matcher.group(2);
-        if (!SourceVersion.isName(module, release))
+        if (!release.isName(module))
             throw new ModuleCompilerException("Invalid module name '" + module + "' in " + moduleInfoJavaPathname);
         return module;
     }

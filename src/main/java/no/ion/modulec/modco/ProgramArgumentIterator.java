@@ -47,6 +47,15 @@ public class ProgramArgumentIterator {
         return args[argi + 1];
     }
 
+    public int getOptionValueInt() {
+        String value = getOptionValueString();
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new UserErrorException("Value of option " + arg() + " not an integer");
+        }
+    }
+
     private void verifyArgi() {
         if (argi > args.length)
             throw new IllegalStateException("Have iterated past the end of the program argument list");

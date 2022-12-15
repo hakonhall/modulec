@@ -8,6 +8,7 @@ import java.io.StringWriter;
 import java.lang.module.ModuleDescriptor;
 import java.util.ArrayList;
 import java.util.spi.ToolProvider;
+import java.util.stream.Collectors;
 
 public class Jar {
     private final ToolProvider jarTool;
@@ -53,6 +54,9 @@ public class Jar {
         var writer = new StringWriter();
         var printWriter = new PrintWriter(writer);
         String[] args = arguments.toArray(String[]::new);
+
+        if (packaging.verbose())
+            System.out.println(arguments.stream().collect(Collectors.joining(" ", "jar ", "")));
 
         // JarToolProvider returns 0 on success and 1 on failure.
         boolean success = jarTool.run(printWriter, printWriter, args) == 0;
