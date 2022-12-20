@@ -13,6 +13,7 @@ public class OutputDirectory {
     private String jarFilename = null;
     private Pathname jar = null;
     private Pathname testJar = null;
+    private Pathname programJar = null;
     private Pathname programDirectory = null;
 
     public enum Owner {
@@ -79,17 +80,24 @@ public class OutputDirectory {
             if (jarFilename == null)
                 throw new IllegalStateException("jar filename not set");
             Pathname testDirectory = out.resolve("test");
-            testDirectory.makeDirectories();
+            testDirectory.makeDirectory();
             testJar = testDirectory.resolve(jarFilename);
         }
         return testJar;
+    }
+
+    public Pathname programJarPath() {
+        if (programJar == null) {
+            programJar = out.resolve("fat.jar");
+        }
+        return programJar;
     }
 
     /** Creates the program directory if it does not exist yet. Returns the program directory. */
     public Pathname programDirectory() {
         if (programDirectory == null) {
             programDirectory = out.resolve("bin");
-            programDirectory.makeDirectories();
+            programDirectory.makeDirectory();
         }
         return programDirectory;
     }

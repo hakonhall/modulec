@@ -7,23 +7,47 @@ import no.ion.modulec.ModuleCompilerException;
 import no.ion.modulec.UserErrorException;
 import no.ion.modulec.compiler.CompilationResult;
 import no.ion.modulec.compiler.ModulePath;
+import no.ion.modulec.file.FileMode;
 import no.ion.modulec.file.OutputDirectory;
 import no.ion.modulec.file.Pathname;
+import no.ion.modulec.jar.FatJar;
+import no.ion.modulec.jar.FatJarSpec;
+import no.ion.modulec.jar.HybridModularJarInfo;
 import no.ion.modulec.jar.Jar;
+import no.ion.modulec.jar.JarInspector;
 import no.ion.modulec.jar.ModulePackaging;
 import no.ion.modulec.jar.PackagingResult;
 import no.ion.modulec.modco.ProgramSpec;
+import no.ion.modulec.module.ModuleVersion;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
+import java.io.UncheckedIOException;
 import java.lang.module.ModuleDescriptor;
+import java.lang.module.ModuleFinder;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import static no.ion.modulec.util.Exceptions.uncheckIO;
 
 class SingleModuleCompilation {
+    private static final Pattern JHMS_JAR_REGEX = Pattern.compile("(^|/)no\\.ion\\.jhms-[0-9]+\\.[0-9]+\\.[0-9]+\\.jar$");
+
     private final Javac javac;
     private final Jar jar;
     private final ModuleCompiler.MakeParams params;
@@ -31,6 +55,7 @@ class SingleModuleCompilation {
     private OutputDirectory output;
     private CompilationResult sourceCompilationResult;
     private String moduleName;
+    private Optional<String> mainClass = null;
     private PackagingResult jarResult;
     private CompilationResult testSourceCompilationResult;
     private PackagingResult testJarResult;
@@ -45,12 +70,13 @@ class SingleModuleCompilation {
         output = initialValidation();
         sourceCompilationResult = compile(compileSourceParams());
         moduleName = resolveModuleName();
+        mainClass = params.mainClass().map(this::qualifyClass);
         output.setJarFilename(moduleName + "@" + params.version() + ".jar");
         jarResult = pack(jarPackaging());
         if (params.testSourceDirectory().isPresent()) {
             testSourceCompilationResult = compile(compileTestSourceParams(params.testSourceDirectory().get()));
             testJarResult = pack(testJarPackaging());
-            if (!runTests(true))
+            if (params.testing() && !runTests())
                 throw new ModuleCompilerException("Testing failed");
         }
         makePrograms();
@@ -124,7 +150,7 @@ class SingleModuleCompilation {
     private ModulePackaging jarPackaging() {
         ModulePackaging modulePackaging = ModulePackaging.forCreatingJar(output.jarPathname().path())
                                                          .setVerbose(params.verbose());
-        params.mainClass().ifPresent(modulePackaging::setMainClass);
+        mainClass.ifPresent(modulePackaging::setMainClass);
         modulePackaging.addDirectoryTree(sourceCompilationResult.destination());
         params.resourceDirectories().stream().map(Pathname::path).forEach(modulePackaging::addDirectoryTree);
         return modulePackaging;
@@ -140,6 +166,8 @@ class SingleModuleCompilation {
         return packaging;
     }
 
+    private String qualifyClass(String name) { return name.startsWith(".") ? moduleName + name : name; }
+
     private PackagingResult pack(ModulePackaging packaging) {
         PackagingResult result = jar.pack(packaging);
         if (!result.success())
@@ -150,7 +178,7 @@ class SingleModuleCompilation {
     }
 
     /** Returns true on success. */
-    private boolean runTests(boolean verbose) {
+    private boolean runTests() {
         try (HybridModuleContainer container = new HybridModuleContainer()) {
             String modulePath = params.modulePath().toColonSeparatedString() + ":" + testJarResult.pathname();
             container.discoverHybridModulesFromModulePath(modulePath);
@@ -167,7 +195,7 @@ class SingleModuleCompilation {
             Thread.currentThread().setContextClassLoader(moduleLoader);
             int exitCode;
             try {
-                if (verbose) {
+                if (params.verbose()) {
                     System.out.printf("javahms -p %s -c %s -m %s %s%n",
                                       modulePath,
                                       moduleName,
@@ -196,11 +224,149 @@ class SingleModuleCompilation {
         //     the form MODULE@VERSION.jar.
         //  The resulting JAR will be called the self-contained java wrapper for launching the
         //  hybrid module application, i.e. a self-contained hybrid module application.
+        Pathname fatJarPath = output.programJarPath();
+        makeFatJar(fatJarPath);
+
+        RandomAccessFile fatJarFile = uncheckIO(() -> new RandomAccessFile(fatJarPath.path().toFile(), "r"));
+        FileChannel fatJarChannel = fatJarFile.getChannel();
+        long fatJarSize = uncheckIO(fatJarChannel::size);
 
         for (ProgramSpec programSpec : params.programs()) {
             Pathname programPath = programDirectory.resolve(programSpec.filename());
-            String mainClass = programSpec.mainClass();
-
+            String mainClassSpec = programSpec
+                    .mainClass()
+                    .map(this::qualifyClass)
+                    .orElseGet(() -> mainClass
+                            .orElseThrow(() -> new ModuleCompilerException(
+                                    "No main class specified for program: " + programSpec.filename())));
+            String mainClass = mainClassSpec.startsWith(".") ? moduleName + mainClassSpec : mainClassSpec;
+            Pathname mainClassPathname = output.outputClassDirectory().resolve(mainClass.replace('.', '/') + ".class");
+            if (!mainClassPathname.isFile())
+                throw new UserErrorException("No such main class: " + mainClass);
+            makeProgram(fatJarChannel, fatJarSize, programPath, mainClass);
         }
+    }
+
+    private void makeFatJar(Pathname fatJarPath) {
+        // Maps module name and version (MODULE@VERSION) to the pathname of the modular JAR.
+        Map<ModuleVersion, HybridModularJarInfo> transitiveJars = new HashMap<>();
+        {
+            ModulePath effectiveModulePath = new ModulePath().addFrom(params.modulePath());
+            effectiveModulePath.addEntry(jarResult.pathname().path());
+
+            Map<ModuleVersion, HybridModularJarInfo> allHybridModules = JarInspector.hybridModulesOf(effectiveModulePath);
+            Set<ModuleVersion> unresolved = new HashSet<>();
+            unresolved.add(new ModuleVersion(moduleName, params.version()));
+            ModuleFinder systemModuleFinder = ModuleFinder.ofSystem();
+            while (!unresolved.isEmpty()) {
+                Iterator<ModuleVersion> iterator = unresolved.iterator();
+                ModuleVersion moduleVersion = iterator.next();
+                iterator.remove();
+
+                HybridModularJarInfo info = allHybridModules.get(moduleVersion);
+                if (info == null)
+                    throw new ModuleCompilerException("Module not found on module path: " + moduleVersion);
+                transitiveJars.put(moduleVersion, info);
+
+                Optional<ModuleDescriptor> descriptor = JarInspector.moduleDescriptorOf(info.location());
+                if (descriptor.isEmpty())
+                    throw new ModuleCompilerException("No module descriptor found: " + info.location());
+
+                for (ModuleDescriptor.Requires requires : descriptor.get().requires()) {
+                    if (systemModuleFinder.find(requires.name()).isPresent()) continue;
+
+                    Optional<ModuleDescriptor.Version> compiledVersion = requires.compiledVersion();
+                    if (compiledVersion.isEmpty())
+                        throw new ModuleCompilerException("Module " + moduleVersion + " requires " + descriptor.get().name() +
+                                                          " at an unspecified version");
+                    ModuleVersion dependency = new ModuleVersion(requires.name(), compiledVersion.get());
+                    if (!transitiveJars.containsKey(dependency))
+                        unresolved.add(dependency);
+                }
+            }
+        }
+
+        FatJar fatJar = new FatJar();
+        Pathname jhmsJarPathname = jhmsJarPathname(fatJarPath.fileSystem());
+        FatJarSpec spec = new FatJarSpec(jhmsJarPathname, fatJarPath);
+        transitiveJars.values().forEach(info -> spec.addFile(info.location(), pathOfModuleInJar(info)));
+        fatJar.extend(spec);
+    }
+
+    private static String pathOfModuleInJar(HybridModularJarInfo info) {
+        return FatJar.MODULE_DIRECTORY + info.id() + ".jar";
+    }
+
+    private Pathname jhmsJarPathname(FileSystem fileSystem) {
+        String classPath = System.getProperty("java.class.path");
+        String[] entries = classPath.split(":", -1);
+        if (entries.length <= 1)
+            throw new ModuleCompilerException("Expected more than one entry in the class path: " +
+                                              "Will not be able to find no.ion.jhms JAR: " + classPath);
+        String jhmsJar = entries[1];
+        if (!JHMS_JAR_REGEX.matcher(jhmsJar).find())
+            throw new ModuleCompilerException("Expected a no.ion.jhms JAR as the second element of the class path: " +
+                                              classPath);
+        Pathname jhmsJarPathname = Pathname.of(fileSystem, jhmsJar);
+        if (!jhmsJarPathname.isFile())
+            throw new ModuleCompilerException("Class path entry not found: " + jhmsJarPathname);
+
+        return jhmsJarPathname;
+    }
+
+    private void makeProgram(FileChannel fatJarChannel, long fatJarSize, Pathname programPath, String mainClass) {
+        try {
+            WritableByteChannel programChannel = Files.newByteChannel(programPath.path(),
+                                                                      StandardOpenOption.CREATE,
+                                                                      StandardOpenOption.TRUNCATE_EXISTING,
+                                                                      StandardOpenOption.WRITE);
+            try {
+                programChannel.write(ByteBuffer.wrap(utf8Stub(mainClass)));
+                fatJarChannel.transferTo(0, fatJarSize, programChannel);
+            } finally {
+                uncheckIO(programChannel::close);
+            }
+
+            // Set executable bits.
+            FileMode mode = programPath.readStatus(true).mode();
+            FileMode newMode = mode.withExecutable();
+            if (!newMode.equals(mode))
+                programPath.chmod(newMode);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+
+        if (params.verbose())
+            System.out.println("Wrote " + programPath);
+    }
+
+    private byte[] utf8Stub(String mainClass) {
+        return """
+        #!/bin/bash
+        
+        if java --version >/dev/null 2>/dev/null; then
+          java=java
+        elif test -d "$JAVA_HOME"; then
+          java="$JAVA_HOME"/bin/java
+        else
+          echo "No java found in PATH, nor was JAVA_HOME set" >&2
+          exit 2
+        fi
+        
+        java_args=()
+        while [ "${1:0:2}" == -J ]; do
+          java_args+=("${1:2}")
+          shift
+        done
+        
+        jhms_args=()
+        while [ "${1:0:2}" == -H ]; do
+          jhms_args+=("${1:2}")
+          shift
+        done
+        
+        exec "$java" -cp "$0" "${java_args[@]}" no.ion.jhms.FatMain "${jhms_args[@]}" %s %s "$@"
+        """.formatted(moduleName, mainClass)
+           .getBytes(StandardCharsets.UTF_8);
     }
 }

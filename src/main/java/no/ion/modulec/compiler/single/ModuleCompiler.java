@@ -39,6 +39,7 @@ public final class ModuleCompiler {
         private Release release = Release.ofJre();
         private final List<Pathname> resourceDirectories = new ArrayList<>();
         private Pathname sourceDirectory = null;
+        private boolean testing = true;
         private Optional<Pathname> testModuleInfo = Optional.empty();
         private final List<Pathname> testResourceDirectories = new ArrayList<>();
         private Optional<Pathname> testSourceDirectory = Optional.empty();
@@ -92,6 +93,11 @@ public final class ModuleCompiler {
             return this;
         }
 
+        public MakeParams setTesting(boolean testing) {
+            this.testing = testing;
+            return this;
+        }
+
         public MakeParams setTestModuleInfo(Pathname testModuleInfo) {
             Objects.requireNonNull(testModuleInfo, "testModuleInfo cannot be null");
             if (!testModuleInfo.filename().equals("module-info.java"))
@@ -129,12 +135,14 @@ public final class ModuleCompiler {
 
         public Optional<String> debug() { return debug; }
         public Pathname out() { return out; }
+        /** May be empty, starting with "." (should prefix module name), or fully qualified. */
         public Optional<String> mainClass() { return mainClass; }
         public ModulePath modulePath() { return modulePath; }
         public List<ProgramSpec> programs() { return List.copyOf(programs); }
         public Release release() { return release; }
         public List<Pathname> resourceDirectories() { return resourceDirectories; }
         public Pathname sourceDirectory() { return sourceDirectory; }
+        public boolean testing() { return testing; }
         public Optional<Pathname> testModuleInfo() { return testModuleInfo; }
         public List<Pathname> testResourceDirectories() { return testResourceDirectories; }
         public Optional<Pathname> testSourceDirectory() { return testSourceDirectory; }
