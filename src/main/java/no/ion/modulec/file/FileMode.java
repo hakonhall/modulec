@@ -161,6 +161,18 @@ public class FileMode {
         return new FileMode(returnedMode);
     }
 
+    /** Returns a file mode with the executable bit set for USR if readable is set, etc for group and other. */
+    public FileMode withExecutable() {
+        FileMode newMode = this;
+        if (newMode.has(FileMode.Bit.RUSR))
+            newMode = newMode.with(FileMode.Bit.XUSR);
+        if (newMode.has(FileMode.Bit.RGRP))
+            newMode = newMode.with(FileMode.Bit.XGRP);
+        if (newMode.has(FileMode.Bit.ROTH))
+            newMode = newMode.with(FileMode.Bit.XOTH);
+        return newMode;
+    }
+
     /** Returns a file mode with the given bits cleared. */
     public FileMode without(Bit... bits) {
         int returnedMode = mode;

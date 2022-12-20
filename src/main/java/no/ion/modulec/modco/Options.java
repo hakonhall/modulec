@@ -28,6 +28,7 @@ public class Options {
         Pathname out = Pathname.of(fileSystem.getPath("out"));
         String mainClass = null;
         ModulePath modulePath = null;
+        boolean testing = true;
         List<ProgramSpec> programs = new ArrayList<>();
         Release release = Release.ofJre();
         Pathname sourceDirectory = null;
@@ -57,6 +58,9 @@ public class Options {
                 case "--module-path":
                     modulePath = new ModulePath().addFromColonSeparatedString(fileSystem, arguments.getOptionValueString());
                     continue;
+                case "--no-testing":
+                    testing = false;
+                    continue;
                 case "-o":
                 case "--output":
                     out = arguments.getOptionValueAsPathname();
@@ -65,13 +69,15 @@ public class Options {
                 case "--program":
                     String value = arguments.getOptionValueString();
                     int equalsIndex = value.indexOf('=');
-                    if (equalsIndex == -1)
-                        throw new UserErrorException("Invalid --program argument");
-                    String filename = value.substring(0, equalsIndex);
-                    String programMainClass = value.substring(equalsIndex + 1);
-                    if (filename.isEmpty() || filename.equals(".") || filename.equals("..") || filename.indexOf('/') != -1)
-                        throw new UserErrorException("Invalid program filename");
-                    programs.add(new ProgramSpec(filename, programMainClass));
+                    if (equalsIndex == -1) {
+                        programs.add(new ProgramSpec(value));
+                    } else {
+                        String filename = value.substring(0, equalsIndex);
+                        String programMainClass = value.substring(equalsIndex + 1);
+                        if (filename.isEmpty() || filename.equals(".") || filename.equals("..") || filename.indexOf('/') != -1)
+                            throw new UserErrorException("Invalid program filename");
+                        programs.add(new ProgramSpec(filename, programMainClass));
+                    }
                     continue;
                 case "-l":
                 case "--release":
@@ -137,16 +143,33 @@ public class Options {
             params.setDebug(debug);
 
         params.setRelease(release);
+        params.setTesting(testing);
 
         if (mainClass != null) {
-            if (!release.isName(mainClass))
-                throw new UserErrorException("Invalid Main class name: '" + mainClass + "'");
+            if (mainClass.startsWith(".")) {
+                // if only we had the module name at this point...
+                if (!release.isName("foo" + mainClass))
+                    throw new UserErrorException("Invalid main-class name suffix: '" + mainClass + "'");
+            } else if (!release.isName(mainClass))
+                throw new UserErrorException("Invalid main-class name: '" + mainClass + "'");
             params.setMainClass(mainClass);
         }
 
         for (ProgramSpec program : programs) {
-            if (!release.isName(program.mainClass()))
-                throw new UserErrorException("Not a valid main class: '" + program.mainClass() + "'");
+            if (program.mainClass().isEmpty()) {
+                if (mainClass == null)
+                    throw new UserErrorException("No main class specified for program: " + program.filename());
+            } else if (program.mainClass().get().startsWith(".")) {
+                // if only we had the module name at this point...
+                String mainClassToValidate = "foo" + program.mainClass().get();
+                if (!release.isName(mainClassToValidate))
+                    throw new UserErrorException("The specified main class suffix is an invalid qualified name suffix: '" +
+                                                 program.mainClass().get() + "'");
+            } else {
+                if (!release.isName(program.mainClass().get()))
+                    throw new UserErrorException("The specified main class is an invalid qualified name: '" +
+                                                 program.mainClass().get() + "'");
+            }
         }
         programs.forEach(params::addProgram);
 

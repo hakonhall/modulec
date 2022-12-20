@@ -1,5 +1,7 @@
 package no.ion.modulec.compiler;
 
+import no.ion.modulec.file.Pathname;
+
 import java.nio.file.FileSystem;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -17,7 +19,7 @@ import java.util.stream.Collectors;
  * </ul>
  */
 public class ModulePath {
-    private record Entry(Path path, String pathString) {}
+    private record Entry(Pathname pathname, String pathString) {}
 
     private final List<Entry> entries = new ArrayList<>();
 
@@ -55,17 +57,22 @@ public class ModulePath {
             throw new IllegalArgumentException("Module path entry cannot contain ':': " + path);
         if (pathString.isEmpty())
             throw new IllegalArgumentException("Empty path");
-        entries.add(new Entry(path, pathString));
+        entries.add(new Entry(Pathname.of(path), pathString));
         return this;
     }
 
     public ModulePath addFromColonSeparatedString(FileSystem fileSystem, String modulePath) {
-        Arrays.stream(modulePath.split(":", -1)).forEach(path -> entries.add(new Entry(fileSystem.getPath(path), path)));
+        Arrays.stream(modulePath.split(":", -1))
+              .forEach(path -> entries.add(new Entry(Pathname.of(fileSystem, path), path)));
         return this;
     }
 
     public List<Path> toPaths() {
-        return entries.stream().map(Entry::path).collect(Collectors.toList());
+        return entries.stream().map(entry -> entry.pathname.path()).collect(Collectors.toList());
+    }
+
+    public List<Pathname> toPathnames() {
+        return entries.stream().map(Entry::pathname).toList();
     }
 
     /** Returns the module path to pass as argument to --module-path or -p. */

@@ -283,6 +283,11 @@ public class Pathname {
         return uncheckIOIgnoring(() -> Files.readString(path), NoSuchFileException.class);
     }
 
+    /** Open input stream. */
+    public UncheckedInputStream newInputStream(OpenOption... options) {
+        return new UncheckedInputStream(uncheckIO(() -> Files.newInputStream(path, options)));
+    }
+
     /** Writes the string in UTF-8 encoding as the content of the regular file at this pathname. */
     public Pathname writeUtf8(String string, OpenOption... openOptions) {
         uncheckIO(() -> Files.writeString(path, string, StandardCharsets.UTF_8, openOptions));
@@ -405,14 +410,13 @@ public class Pathname {
      *                                    {@link java.nio.file.StandardCopyOption#REPLACE_EXISTING REPLACE_EXISTING}
      *                                    option has not been specified.
      */
-    public Pathname copyTo(Pathname target, CopyOption... options) { return copyTo(target.path, options); }
+    public void copyTo(Pathname target, CopyOption... options) { copyTo(target.path, options); }
 
-    public Pathname copyTo(Path target, CopyOption... options) {
+    public void copyTo(Path target, CopyOption... options) {
         uncheckIO(() -> Files.copy(path, target, options));
-        return this;
     }
 
-    public Pathname copyTo(String target, CopyOption... options) { return copyTo(fileSystem().getPath(target), options); }
+    public void copyTo(String target, CopyOption... options) { copyTo(fileSystem().getPath(target), options); }
 
     @Override
     public boolean equals(Object o) {
