@@ -29,21 +29,35 @@ public record CompilationResult(boolean success, Duration duration, List<Diagnos
         }
 
         int errors = 0;
+        int warnings = 0;
 
         var buffer = new StringBuilder();
         for (var diagnostic : diagnostics) {
-            if (diagnostic.kind() == javax.tools.Diagnostic.Kind.ERROR) {
-                errors += 1;
+            switch (diagnostic.kind()) {
+                case ERROR -> errors++;
+                case WARNING, MANDATORY_WARNING -> warnings++;
             }
 
             if (diagnostic.source().isPresent()) {
-                buffer.append(diagnostic.source().get().getName());
-                diagnostic.lineNumber().ifPresent(lineNumber -> buffer.append(':').append(lineNumber));
-                buffer.append(": ");
+                diagnostic.lineNumber().ifPresent(lineNumber -> {
+                    // E.g. the message "error: warnings found and -Werror specified" comes in a diagnostic
+                    // with a source (the last processed?), but no line number.
+                    buffer.append(diagnostic.source().get().getName());
+                    buffer.append(':').append(lineNumber);
+                    buffer.append(": ");
+                });
                 if (diagnostic.kind() == javax.tools.Diagnostic.Kind.ERROR) {
                     buffer.append("error: ");
-                } else if (diagnostic.kind() == javax.tools.Diagnostic.Kind.WARNING || diagnostic.kind() == javax.tools.Diagnostic.Kind.MANDATORY_WARNING) {
+                } else if (diagnostic.kind() == javax.tools.Diagnostic.Kind.WARNING ||
+                           diagnostic.kind() == javax.tools.Diagnostic.Kind.MANDATORY_WARNING) {
                     buffer.append("warning: ");
+                    diagnostic.code().ifPresent(code -> {
+                        int lastDot = code.lastIndexOf('.');
+                        if (lastDot >= 0) {
+                            code = code.substring(lastDot + 1);
+                        }
+                        buffer.append('[').append(code).append("] ");
+                    });
                 }
                 buffer.append(diagnostic.message()).append('\n');
 
@@ -66,15 +80,14 @@ public record CompilationResult(boolean success, Duration duration, List<Diagnos
             }
         }
 
-        if (errors > 0) {
+        if (errors > 0)
             buffer.append(errors).append(errors == 1 ? " error\n" : " errors\n");
-        }
+        if (warnings > 0)
+            buffer.append(warnings).append(warnings == 1 ? " warning\n" : " warnings\n");
 
         if (!out.isEmpty())
             buffer.append(out);
 
-        buffer.append(success ? "OK\n" : "FAILED\n");
-        buffer.append(String.format("Completed in %.3fs\n", duration.toNanos() / 1000_000_000.0));
         return buffer.toString();
     }
 }

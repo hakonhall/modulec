@@ -85,7 +85,7 @@ class CompilerTest {
         assertTrue(moduleInfoClassAttributes.get().isFile());
 
         String resultString = result.makeMessage();
-        assertTrue(resultString.startsWith("OK\n"), "Bad result: " + resultString);
+        assertEquals("", resultString, "Bad result: " + resultString);
     }
 
     @Test
@@ -102,7 +102,7 @@ class CompilerTest {
                     .setClassOutputDirectory(workDir.resolve("moduleB/target").path());
             CompilationResult result = compiler.compile(compilation);
             assertTrue(result.success(), "Compilation failed: " + result.makeMessage());
-            assertTrue(result.makeMessage().startsWith("OK\n"), "Bad message: " + result.makeMessage());
+            assertEquals("", result.makeMessage(), "Bad message: " + result.makeMessage());
             assertEquals(0, result.diagnostics().size());
 
             assertTrue(workDir.resolve("moduleA/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false));
@@ -134,7 +134,7 @@ class CompilerTest {
                         .setClassOutputDirectory(workDir.resolve("moduleA/target").path());
                 CompilationResult resultA = compiler.compile(compilationA);
                 assertTrue(resultA.success(), "Compilation failed: " + resultA.makeMessage());
-                assertTrue(resultA.makeMessage().startsWith("OK\n"), "Bad message: " + resultA.makeMessage());
+                assertEquals("", resultA.makeMessage(), "Bad message: " + resultA.makeMessage());
                 assertEquals(0, resultA.diagnostics().size());
 
                 assertTrue(workDir.resolve("moduleA/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false));
@@ -152,7 +152,7 @@ class CompilerTest {
                 CompilationResult resultB = compiler.compile(compilationB);
 
                 assertTrue(resultB.success(), "Compilation failed: " + resultB.makeMessage());
-                assertTrue(resultB.makeMessage().startsWith("OK\n"), "Bad message: " + resultB.makeMessage());
+                assertEquals("", resultB.makeMessage(), "Bad message: " + resultB.makeMessage());
                 assertEquals(0, resultB.diagnostics().size());
 
                 assertTrue(workDir.resolve("moduleB/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false), "moduleB/target does not exist");

@@ -30,6 +30,8 @@ public class ModulePath {
         return this;
     }
 
+    public boolean isEmpty() { return entries.isEmpty(); }
+
     public ModulePath addFrom(ModulePath that) {
         entries.addAll(that.entries);
         return this;

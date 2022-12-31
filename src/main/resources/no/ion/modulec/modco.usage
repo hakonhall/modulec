@@ -10,7 +10,7 @@ launch the module as a Java Hybrid Module System application with MC as the
 main class.  The program requires java in PATH, or JAVA_HOME being set.
 
 Options:
-  -g,--debug                Same as javac -g.
+  -g,--debug DEBUG          Same as -g:DEBUG, by default -g. "" disables.
   -e,--main-class MCLASS    Sets the main class of the module. If MCLASS starts
                             with '.', it is prefixed with the module name.
   -p,--module-path MPATH    Sets the module path [mod].
@@ -27,4 +27,6 @@ Options:
   -t,--test-source TS       Test source directory [src/test/java].
   -b,--verbose              Print command-line equivalents and more.
   -v,--version VERSION      The module version.
-  -w,--warnings LINT        Same as -Xlint:LINT, by default "all". "" disables.
+  -w,--warnings LINT        Same as -Xlint:LINT, by default -Xlint. "" disables
+
+javac's -Werror is implied.

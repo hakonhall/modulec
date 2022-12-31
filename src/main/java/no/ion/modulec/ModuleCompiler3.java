@@ -28,10 +28,12 @@ public class ModuleCompiler3 {
             System.err.println(e.getMessage() + ", see '--help' for usage");
             System.exit(1);
         } catch (ModuleCompilerException e) {
-            if (e.isMultiLine()) {
-                System.err.print(e.getMessage());
-            } else {
-                System.err.println(PROGRAM_NAME + ": " + e.getMessage());
+            if (!e.isSilent()) {
+                if (e.isMultiLine()) {
+                    System.err.print(e.getMessage());
+                } else {
+                    System.err.println(PROGRAM_NAME + ": " + e.getMessage());
+                }
             }
             System.exit(1);
         }

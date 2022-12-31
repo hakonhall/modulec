@@ -24,7 +24,7 @@ public class Options {
     public ModuleCompiler.MakeParams params() { return params; }
 
     public static Options parse(FileSystem fileSystem, String... args) {
-        String debug = null;
+        String debug = "";  // Equivalent to javac's -g
         Pathname out = Pathname.of(fileSystem.getPath("out"));
         String mainClass = null;
         ModulePath modulePath = null;
@@ -45,7 +45,11 @@ public class Options {
             switch (arguments.arg()) {
                 case "-g":
                 case "--debug":
-                    debug = "";
+                    debug = arguments.getOptionValueString();
+                    // Empty DEBUG means -g should not be passed to javac, i.e. avoid calling
+                    // ModuleCompiler.MakeParams.setDebug().
+                    if (debug.isEmpty())
+                        debug = null;
                     continue;
                 case "-h":
                 case "--help":
