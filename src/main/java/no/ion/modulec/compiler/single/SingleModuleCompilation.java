@@ -103,8 +103,11 @@ class SingleModuleCompilation {
         if (compileParams == null) return null;  // propagate abortion of compilation
 
         CompilationResult result = javac.compile(compileParams);
+        String message = result.makeMessage();
+        if (!message.isEmpty())
+            System.out.print(message);
         if (!result.success())
-            throw new ModuleCompilerException(result.makeMessage()).setMultiLine(true);
+            throw new ModuleCompilerException(result.makeMessage()).setMultiLine(true).setSilent(true);
         if (params.verbose()) {
             System.out.printf("compiled %s to %s in %.3fs%n",
                               compileParams.sourceDirectory(),
@@ -180,8 +183,11 @@ class SingleModuleCompilation {
     /** Returns true on success. */
     private boolean runTests() {
         try (HybridModuleContainer container = new HybridModuleContainer()) {
-            String modulePath = params.modulePath().toColonSeparatedString() + ":" + testJarResult.pathname();
-            container.discoverHybridModulesFromModulePath(modulePath);
+            ModulePath modulePath = params.modulePath();
+            String modulePathString = modulePath.isEmpty() ?
+                                      testJarResult.pathname().toString() :
+                                      modulePath.toColonSeparatedString() + ":" + testJarResult.pathname().toString();
+            container.discoverHybridModulesFromModulePath(modulePathString);
 
             String testBooterModule = "no.ion.hybridmodules.test.junit";
             RootHybridModule testBooter = container.resolve(new HybridModuleContainer
@@ -197,7 +203,7 @@ class SingleModuleCompilation {
             try {
                 if (params.verbose()) {
                     System.out.printf("javahms -p %s -c %s -m %s %s%n",
-                                      modulePath,
+                                      modulePathString,
                                       moduleName,
                                       testBooterModule,
                                       testJarResult.pathname());

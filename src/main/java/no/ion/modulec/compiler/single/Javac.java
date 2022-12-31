@@ -41,7 +41,7 @@ class Javac {
     }
 
     static class CompileParams {
-        private Optional<String> debug = Optional.empty();
+        private Optional<String> debug = Optional.of(""); // => -g
         private Pathname classDirectory = null;
         private ModulePath modulePath = new ModulePath();
         private Pathname moduleInfo = null;
@@ -55,7 +55,12 @@ class Javac {
 
         record Patch(String moduleName, Pathname modularJarPathname) {}
 
-        CompileParams() {}
+        CompileParams() {
+            // Fail on warnings
+            options.add("-Werror");
+            // Avoid generating class files for implicitly referenced files
+            options.add("-implicit:none");
+        }
 
         /** The directory must exist. */
         CompileParams setClassDirectory(Pathname classDirectory) {
@@ -144,9 +149,12 @@ class Javac {
             javacEquivalentArguments.add("-d");
             javacEquivalentArguments.add(compilation.classDirectory().path().toString());
 
-            uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.MODULE_PATH, compilation.mutableModulePath().toPaths()));
-            javacEquivalentArguments.add("-p");
-            javacEquivalentArguments.add(compilation.mutableModulePath().toColonSeparatedString());
+            ModulePath modulePath = compilation.mutableModulePath();
+            if (!modulePath.isEmpty()) {
+                uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.MODULE_PATH, modulePath.toPaths()));
+                javacEquivalentArguments.add("-p");
+                javacEquivalentArguments.add(modulePath.toColonSeparatedString());
+            }
 
             var options = new ArrayList<String>(compilation.options());
 
@@ -184,9 +192,6 @@ class Javac {
                            options.add("--patch-module");
                            options.add(patch.moduleName() + "=" + patch.modularJarPathname());
                        });
-
-            // Avoid generating class files for implicitly referenced files
-            options.add("-implicit:none");
 
             // TODO: Enable dependency generation. Append file=foo?
             // options.add("--debug=completionDeps=source,class");

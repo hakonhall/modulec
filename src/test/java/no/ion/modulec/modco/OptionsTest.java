@@ -48,7 +48,7 @@ class OptionsTest {
     @Test
     void testFullOptions() {
         Options options = Options.parse(fileSystem,
-                                        "-g",
+                                        "-g", "",
                                         "-e", "a.main.Klass",
                                         "-p", "a:b",
                                         "-o", "target",
@@ -63,7 +63,7 @@ class OptionsTest {
                                         "-v", "1.2.3",
                                         "-w", "-serial");
         ModuleCompiler.MakeParams params = options.params();
-        assertEquals(Optional.of(""), params.debug());
+        assertEquals(Optional.empty(), params.debug());
         assertEquals(Optional.of("a.main.Klass"), params.mainClass());
         assertEquals("a:b", params.modulePath().toColonSeparatedString());
         assertEquals(Pathname.of(fileSystem, "target"), params.out());
@@ -92,7 +92,7 @@ class OptionsTest {
     void testMinimal() {
         Options options = Options.parse(fileSystem, "-v", "1.2.3");
         ModuleCompiler.MakeParams params = options.params();
-        assertEquals(Optional.empty(), params.debug());
+        assertEquals(Optional.of(""), params.debug());
         assertEquals(Optional.empty(), params.mainClass());
         assertEquals(".", params.modulePath().toColonSeparatedString());
         assertEquals(Pathname.of(fileSystem, "out"), params.out());

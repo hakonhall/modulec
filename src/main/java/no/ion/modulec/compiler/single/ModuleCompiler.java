@@ -31,7 +31,7 @@ public final class ModuleCompiler {
 
         private final FileSystem fileSystem;
 
-        private Optional<String> debug = Optional.empty();  // empty => no -g, "" => -g, "none" => -g:none, etc.
+        private Optional<String> debug = Optional.empty();
         private Pathname out = null;
         private Optional<String> mainClass = Optional.empty();
         private ModulePath modulePath = new ModulePath();
@@ -51,6 +51,7 @@ public final class ModuleCompiler {
             this.fileSystem = fileSystem;
         }
 
+        /** Same as javac's -g:debug.  But "" means -g.  If not called, -g will not be passed to javac. */
         public MakeParams setDebug(String debug) {
             Objects.requireNonNull(debug, "debug cannot be null");
             this.debug = Optional.of(debug);

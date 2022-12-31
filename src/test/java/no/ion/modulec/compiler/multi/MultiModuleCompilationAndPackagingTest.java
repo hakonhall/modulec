@@ -52,7 +52,7 @@ public class MultiModuleCompilationAndPackagingTest {
 
         MultiModuleCompilationAndPackagingResult result = compiler.make(compilation);
 
-        assertTrue(result.cResult().makeMessage().startsWith("OK\n"), "Unexpected message: " + result.cResult().makeMessage());
+        assertEquals("", result.cResult().makeMessage(), "Unexpected message: " + result.cResult().makeMessage());
         assertTrue(result.cResult().success());
         assertEquals("", result.cResult().out());
         assertNull(result.cResult().exception());
@@ -101,7 +101,7 @@ public class MultiModuleCompilationAndPackagingTest {
 
         MultiModuleCompilationAndPackagingResult result = compiler.make(compilation);
 
-        assertTrue(result.cResult().makeMessage().startsWith("OK\n"), "Unexpected message: " + result.cResult().makeMessage());
+        assertEquals("", result.cResult().makeMessage(), "Unexpected message: " + result.cResult().makeMessage());
         assertTrue(result.cResult().success());
         assertEquals("", result.cResult().out());
         assertNull(result.cResult().exception());
