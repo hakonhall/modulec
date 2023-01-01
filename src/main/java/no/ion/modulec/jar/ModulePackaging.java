@@ -13,7 +13,6 @@ import java.util.Optional;
 public class ModulePackaging {
     private final Path jarFile;
     private final String action;
-    private boolean verbose = false;
     private ModuleDescriptor.Version version = null;
     private final List<Include> includes = new ArrayList<>();
     /** null means no jar arg and get default manifest, empty mean --no-manifest, and otherwise --manifest FILE. */
@@ -35,11 +34,6 @@ public class ModulePackaging {
     private ModulePackaging(Path jarFile, String action) {
         this.jarFile = jarFile;
         this.action = action;
-    }
-
-    public ModulePackaging setVerbose(boolean verbose) {
-        this.verbose = verbose;
-        return this;
     }
 
     public ModulePackaging setVersion(ModuleDescriptor.Version version) {
@@ -78,6 +72,5 @@ public class ModulePackaging {
     public List<Include> includes() { return List.copyOf(includes); }
     public Optional<Path> manifest() { return manifest; }
     public String mainClass() { return mainClass; }
-    public boolean verbose() { return verbose; }
     public ModuleDescriptor.Version version() { return version; }
 }

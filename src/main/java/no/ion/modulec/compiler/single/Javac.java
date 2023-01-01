@@ -1,5 +1,6 @@
 package no.ion.modulec.compiler.single;
 
+import no.ion.modulec.Context;
 import no.ion.modulec.ModuleCompilerException;
 import no.ion.modulec.UserErrorException;
 import no.ion.modulec.compiler.CompilationResult;
@@ -37,9 +38,11 @@ import java.util.stream.Collectors;
 import static no.ion.modulec.util.Exceptions.uncheckIO;
 
 class Javac {
+    private final Context context;
     private final JavaCompiler compiler;
 
-    Javac() {
+    Javac(Context context) {
+        this.context = context;
         this.compiler = ToolProvider.getSystemJavaCompiler();
     }
 
@@ -53,7 +56,6 @@ class Javac {
         private final List<CompileParams.Patch> patches = new ArrayList<>();
         private Release release = Release.ofJre();
         private Pathname sourceDirectory = null;
-        private boolean verbose;
         private ModuleDescriptor.Version version = null;
         private Optional<String> warnings = Optional.of("all");
 
@@ -109,11 +111,6 @@ class Javac {
             return this;
         }
 
-        CompileParams setVerbose(boolean verbose) {
-            this.verbose = verbose;
-            return this;
-        }
-
         CompileParams setVersion(ModuleDescriptor.Version version) {
             this.version = Objects.requireNonNull(version, "version cannot be null");
             return this;
@@ -131,7 +128,6 @@ class Javac {
         Pathname classDirectory() { return classDirectory; }
         List<CompileParams.Patch> patchedModules() { return List.copyOf(patches); }
         Release release() { return release; }
-        boolean verbose() { return verbose; }
         ModuleDescriptor.Version version() { return version; }
         Optional<String> warnings() { return warnings; }
 
@@ -146,12 +142,12 @@ class Javac {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             CompileParams that = (CompileParams) o;
-            return verbose == that.verbose && Objects.equals(debug, that.debug) && Objects.equals(classDirectory, that.classDirectory) && Objects.equals(modulePath, that.modulePath) && Objects.equals(moduleInfo, that.moduleInfo) && Objects.equals(options, that.options) && Objects.equals(patches, that.patches) && Objects.equals(release, that.release) && Objects.equals(sourceDirectory, that.sourceDirectory) && Objects.equals(version, that.version) && Objects.equals(warnings, that.warnings);
+            return Objects.equals(debug, that.debug) && Objects.equals(classDirectory, that.classDirectory) && Objects.equals(modulePath, that.modulePath) && Objects.equals(moduleInfo, that.moduleInfo) && Objects.equals(options, that.options) && Objects.equals(patches, that.patches) && Objects.equals(release, that.release) && Objects.equals(sourceDirectory, that.sourceDirectory) && Objects.equals(version, that.version) && Objects.equals(warnings, that.warnings);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(debug, classDirectory, modulePath, moduleInfo, options, patches, release, sourceDirectory, verbose, version, warnings);
+            return Objects.hash(debug, classDirectory, modulePath, moduleInfo, options, patches, release, sourceDirectory, version, warnings);
         }
     }
 
@@ -174,7 +170,6 @@ class Javac {
         } else {
             Optional<List<Path>> javaPaths2 = prepareClassDirectory(compilation.classDirectory,
                                                                     sources,
-                                                                    compilation.verbose,
                                                                     compilation.checksumFile,
                                                                     compilation.hashCode());
             if (javaPaths2.isEmpty())
@@ -193,6 +188,7 @@ class Javac {
         boolean success;
         RuntimeException exception = null;
         List<String> javacEquivalentArguments = new ArrayList<>();
+        javacEquivalentArguments.add("javac");
 
         StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, compilation.locale(), compilation.charset());
         try {
@@ -253,11 +249,7 @@ class Javac {
             Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(javaPaths);
             compilationUnits.forEach(unit -> javacEquivalentArguments.add(unit.getName()));
 
-            if (compilation.verbose()) {
-                System.out.println(javacEquivalentArguments.stream()
-                                                           .map(Javac::escapeArgument)
-                                                           .collect(Collectors.joining(" ", "javac ", "")));
-            }
+            context.log().command(javacEquivalentArguments);
             JavaCompiler.CompilationTask task = compiler.getTask(writer, standardFileManager, collector, options, null, compilationUnits);
             try {
                 success = task.call();
@@ -359,7 +351,7 @@ class Javac {
      * Optional.empty() if no source files needs to be recompiled.  Otherwise the *.java source files found in the
      * source directories.
      */
-    private Optional<List<Path>> prepareClassDirectory(Pathname classDirectory, List<Pathname> sources, boolean verbose,
+    private Optional<List<Path>> prepareClassDirectory(Pathname classDirectory, List<Pathname> sources,
                                                        Pathname checksumFile, int checksum) {
 
         // Optimization
@@ -401,7 +393,6 @@ class Javac {
                                                            .stream())
                 .collect(Collectors.toList());
 
-        final boolean doDelete = false;
         final Pathname normalizedClassDirectory = classDirectory.normalize();
         final boolean[] mustCompile = { false };
         normalizedClassDirectory.visit(false, false, (pathname, attributes) -> {
@@ -409,9 +400,8 @@ class Javac {
 
             if (attributes.isDirectory()) {
                 if (!whitelist.containsKey(lookupKey + "/")) {
-                    if (verbose)
-                        System.out.println("Deleting directory: " + pathname);
-                    if (doDelete) pathname.deleteRecursively();
+                    context.log().debugLine(() -> "Deleting directory: " + pathname);
+                    pathname.deleteRecursively();
                     mustCompile[0] = true;
                     return Pathname.VisitHint.SKIP;
                 }
@@ -426,28 +416,24 @@ class Javac {
                     BasicAttributes sourceAttributes = whitelist.get(lookupKey.toString());
                     if (sourceAttributes == null) {
                         // source file deleted
-                        if (verbose)
-                            System.out.println("Deleting orphaned class file: " + pathname);
-                        if (doDelete) pathname.delete();
+                        context.log().debugLine(() -> "Deleting orphaned class file: " + pathname);
+                        pathname.delete();
                         mustCompile[0] = true;
                     } else if (!sourceAttributes.lastModified().isBefore(attributes.lastModified())) {
                         if (dollarIndex != -1) {
-                            if (verbose)
-                                System.out.println("Source about to be recompiled: Deleting derived class: " + pathname);
-                            if (doDelete) pathname.delete();
+                            context.log().debugLine(() -> "Source about to be recompiled: Deleting derived class: " + pathname);
+                            pathname.delete();
                         }
                         mustCompile[0] = true;
                     }
                 } else {
-                    if (verbose)
-                        System.out.println("Deleting stray file: " + pathname);
-                    if (doDelete) pathname.delete();
+                    context.log().debugLine(() -> "Deleting stray file: " + pathname);
+                    pathname.delete();
                     mustCompile[0] = true;
                 }
             } else {
-                if (verbose)
-                    System.out.println("Deleting stray file: " + pathname);
-                if (doDelete) pathname.delete();
+                context.log().debugLine(() -> "Deleting stray file: " + pathname);
+                pathname.delete();
                 mustCompile[0] = true;
             }
 
