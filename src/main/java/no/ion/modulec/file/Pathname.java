@@ -23,6 +23,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 import static no.ion.modulec.util.Exceptions.uncheckIO;
@@ -50,6 +52,8 @@ public class Pathname {
 
     private Pathname(Path path) { this.path = path; }
 
+    public Pathname normalize() { return of(path.normalize()); }
+
     public Pathname parent() {
         Path parent = path.getParent();
         return parent == null ?
@@ -62,6 +66,9 @@ public class Pathname {
     public Pathname resolve(Pathname other) { return resolve(other.path); }
     public Pathname resolve(Path other) { return of(path.resolve(other)); }
     public Pathname resolve(String other) { return of(path.resolve(other)); }
+
+    /** Returns a Pathname to this, relative the given base. I.e. base.resolve(this.relative(base)) is equal to this. */
+    public Pathname relative(Pathname base) { return of(base.path.relativize(path)); }
 
     public FileSystem fileSystem() { return path.getFileSystem(); }
     public String filename() { return path.getFileName().toString(); }
@@ -121,7 +128,58 @@ public class Pathname {
         return this;
     }
 
+    public enum VisitHint {
+        /** Continue to visit the next file or directory. */
+        CONTINUE,
+
+        /** Don't enter the directory. */
+        SKIP,
+
+        /** Stop all visiting. */
+        STOP
+    }
+
+    /**
+     * Invoke {@link BiConsumer#accept(Object, Object) callback.accept(pathname, attributes)} for each file and
+     * directory at or below this directory.  Directories are always visited before their entries.  To get the
+     * path of the file or directory relative this directory, invoke {@code pathname.relative(this)}.
+     *
+     * @param followSymlinks whether to follow symlinks
+     * @param includeThis    whether to invoke the callback on this directory too
+     * @param callback       callback to invoke for each file and directory
+     */
+    public void visit(boolean followSymlinks, boolean includeThis, BiFunction<Pathname, BasicAttributes, VisitHint> callback) {
+        Optional<BasicAttributes> thisAttributes = readAttributesIfExists(followSymlinks);
+        if (thisAttributes.isEmpty() || !thisAttributes.get().isDirectory())
+            return;
+
+        if (includeThis) {
+            switch (callback.apply(this, thisAttributes.get())) {
+                case SKIP, STOP -> { return; }
+            }
+        }
+
+        var dirs = new ArrayList<Pathname>();
+        dirs.add(this);
+        do {
+            try (OpenDirectory openDirectory = dirs.remove(dirs.size() - 1).openDirectory()) {
+                for (Pathname directory : openDirectory) {
+                    BasicAttributes attributes = directory.readAttributes(followSymlinks);
+                    VisitHint hint = callback.apply(directory, attributes);
+                    if (hint == VisitHint.STOP)
+                        return;
+                    if (hint != VisitHint.SKIP && attributes.isDirectory())
+                        dirs.add(directory);
+                }
+            }
+        } while (dirs.size() > 0);
+    }
+
     public OpenDirectory openDirectory() { return OpenDirectory.open(path); }
+
+    public boolean isSame(Pathname that) {
+        return uncheckIO(() -> Files.isSameFile(path, that.path));
+    }
 
     @FunctionalInterface
     public interface BasicFilterMap<T> {

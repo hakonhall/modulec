@@ -1,7 +1,7 @@
 package no.ion.modulec.jar;
 
 import no.ion.modulec.file.Pathname;
-import no.ion.modulec.util.ModuleCompilerException;
+import no.ion.modulec.ModuleCompilerException;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;

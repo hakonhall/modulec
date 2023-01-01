@@ -1,5 +1,6 @@
 package no.ion.modulec.compiler.multi;
 
+import no.ion.modulec.ModuleCompilerException;
 import no.ion.modulec.compiler.CompilationResult;
 import no.ion.modulec.compiler.Diagnostic;
 import no.ion.modulec.compiler.Release;
@@ -7,7 +8,6 @@ import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
 import no.ion.modulec.file.SourceDirectory;
 import no.ion.modulec.file.TemporaryDirectory;
-import no.ion.modulec.util.ModuleCompilerException;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -46,6 +46,7 @@ public class Compiler {
         var writer = new StringWriter();
         boolean success;
         RuntimeException exception = null;
+        var sourcePaths = new ArrayList<Path>();
 
         StandardJavaFileManager standardFileManager = compiler.getStandardFileManager(collector, compilation.locale(), compilation.charset());
         try {
@@ -66,7 +67,6 @@ public class Compiler {
                     if (nModules == 0)
                         return CompilationResult.ofError(startNanos, "error: no modules\n");
                     var moduleNames = new HashSet<String>(nModules);
-                    var sourcePaths = new ArrayList<Path>();
                     for (var module : compilation.modules()) {
                         List<Path> sourceDirectories = module.sourceDirectories();
                         if (sourceDirectories.isEmpty())
@@ -137,7 +137,7 @@ public class Compiler {
                     int numDeleted = classOutput.deleteRecursively();
                     if (numDeleted > 1) {
                         throw new ModuleCompilerException((numDeleted - 1) + " files were written to the temporary and " +
-                                                                  "non-module output directory for class files!?");
+                                                          "non-module output directory for class files!?");
                     }
                 }
             }
@@ -162,13 +162,13 @@ public class Compiler {
 
         String out = writer.toString();
         var duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new CompilationResult(success, duration, diagnostics, out, null, exception);
+        return new CompilationResult(success, sourcePaths.size(), duration, diagnostics, out, null, exception);
     }
 
     private static List<Path> sourceFiles(List<Path> sourceDirectories) {
         return sourceDirectories.stream()
                                 .map(Pathname::of)
-                                .map(SourceDirectory::resolveSourceDirectory)
+                                .map(SourceDirectory::resolveSource)
                                 .flatMap(List::stream)
                                 .collect(Collectors.toList());
     }

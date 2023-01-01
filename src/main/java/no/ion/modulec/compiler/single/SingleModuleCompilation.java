@@ -76,8 +76,8 @@ class SingleModuleCompilation {
         if (params.testSourceDirectory().isPresent()) {
             testSourceCompilationResult = compile(compileTestSourceParams(params.testSourceDirectory().get()));
             testJarResult = pack(testJarPackaging());
-            if (params.testing() && !runTests())
-                throw new ModuleCompilerException("Testing failed");
+            if (params.testing())
+                runTests();
         }
         makePrograms();
     }
@@ -109,10 +109,18 @@ class SingleModuleCompilation {
         if (!result.success())
             throw new ModuleCompilerException(result.makeMessage()).setMultiLine(true).setSilent(true);
         if (params.verbose()) {
-            System.out.printf("compiled %s to %s in %.3fs%n",
-                              compileParams.sourceDirectory(),
-                              result.destination(),
-                              result.duration().toNanos() / 1_000_000_000d);
+            if (result.noop()) {
+                System.out.printf("compiled no source files in %s to %s in %.3fs [up to date]%n",
+                                  compileParams.sourceDirectory(),
+                                  result.destination(),
+                                  result.duration().toNanos() / 1_000_000_000d);
+            } else {
+                System.out.printf("compiled %d source files in %s to %s in %.3fs%n",
+                                  result.sourceFiles(),
+                                  compileParams.sourceDirectory(),
+                                  result.destination(),
+                                  result.duration().toNanos() / 1_000_000_000d);
+            }
         }
         return result;
     }
@@ -122,6 +130,7 @@ class SingleModuleCompilation {
                                         .setSourceDirectory(params.sourceDirectory())
                                         .addModulePathEntriesFrom(params.modulePath())
                                         .setClassDirectory(output.outputClassDirectory())
+                                        .setCompilationChecksumFile(output.compilationChecksumFile())
                                         .setRelease(params.release())
                                         .setVerbose(params.verbose())
                                         .setVersion(params.version())
@@ -143,6 +152,7 @@ class SingleModuleCompilation {
                                                                      .patchModule(moduleName, jarResult.pathname())
                                                                      .setRelease(params.release())
                                                                      .setClassDirectory(output.outputTestClassDirectory())
+                                                                     .setCompilationChecksumFile(output.testCompilationChecksumFile())
                                                                      .setVerbose(params.verbose())
                                                                      .setVersion(params.version())
                                                                      .setWarnings(params.warnings());
@@ -180,8 +190,7 @@ class SingleModuleCompilation {
         return result;
     }
 
-    /** Returns true on success. */
-    private boolean runTests() {
+    private void runTests() {
         try (HybridModuleContainer container = new HybridModuleContainer()) {
             ModulePath modulePath = params.modulePath();
             String modulePathString = modulePath.isEmpty() ?
@@ -189,7 +198,7 @@ class SingleModuleCompilation {
                                       modulePath.toColonSeparatedString() + ":" + testJarResult.pathname().toString();
             container.discoverHybridModulesFromModulePath(modulePathString);
 
-            String testBooterModule = "no.ion.hybridmodules.test.junit";
+            String testBooterModule = "no.ion.jhms.test.junit";
             RootHybridModule testBooter = container.resolve(new HybridModuleContainer
                     .ResolveParams(testBooterModule)
                     .requireVersion("5.9.1"));
@@ -213,7 +222,8 @@ class SingleModuleCompilation {
                 Thread.currentThread().setContextClassLoader(savedContext);
             }
 
-            return exitCode == 0;
+            if (exitCode != 0)
+                throw new ModuleCompilerException("Testing failed");
         }
     }
 

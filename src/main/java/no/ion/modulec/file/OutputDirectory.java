@@ -47,6 +47,10 @@ public class OutputDirectory {
         return outputClassDirectory;
     }
 
+    public Pathname compilationChecksumFile() {
+        return out.resolve("compile.sum");
+    }
+
     /** Creates the output directory for the class files from the compilation of the test source files, if not already done. */
     public Pathname outputTestClassDirectory() {
         if (outputTestClassDirectory == null) {
@@ -54,6 +58,10 @@ public class OutputDirectory {
             outputTestClassDirectory.makeDirectories();
         }
         return outputTestClassDirectory;
+    }
+
+    public Pathname testCompilationChecksumFile() {
+        return out.resolve("testCompile.sum");
     }
 
     public void setJarFilename(String filename) {
@@ -100,6 +108,18 @@ public class OutputDirectory {
             programDirectory.makeDirectory();
         }
         return programDirectory;
+    }
+
+    private boolean sameChecksum(Pathname pathname, int checksum) {
+        Optional<String> content = pathname.readUtf8IfExists();
+        if (content.isEmpty())
+            return false;
+
+        try {
+            return Integer.parseInt(content.get()) == checksum;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private OutputDirectory create() {

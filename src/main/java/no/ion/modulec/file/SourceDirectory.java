@@ -10,14 +10,21 @@ import java.util.Optional;
  * Can be used for both source and test source directories.
  */
 public class SourceDirectory {
-    public static List<Path> resolveSourceDirectory(Pathname sourceDirectory) {
-        if (!sourceDirectory.isDirectory())
-            throw new ModuleCompilerException("Source directory does not exist: " + sourceDirectory);
+    public static List<Path> resolveSource(Pathname source) {
+        Optional<BasicAttributes> attributes = source.readAttributesIfExists(true);
+        if (attributes.isEmpty())
+            throw new ModuleCompilerException("Source directory does not exist: " + source);
 
-        return sourceDirectory.find(true,
-                                    (subpathname, attribute) ->
-                                            attribute.isFile() && subpathname.filename().endsWith(".java") ?
-                                            Optional.of(subpathname.path()) :
-                                            Optional.empty());
+        if (attributes.get().isDirectory()) {
+            return source.find(true,
+                               (subpathname, attribute) ->
+                                       attribute.isFile() && subpathname.filename().endsWith(".java") ?
+                                       Optional.of(subpathname.path()) :
+                                       Optional.empty());
+        } else if (source.toString().endsWith(".java")) {
+            return List.of(source.path());
+        } else {
+            throw new ModuleCompilerException("Invalid source: " + source);
+        }
     }
 }
