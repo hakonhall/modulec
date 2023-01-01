@@ -1,11 +1,10 @@
 package no.ion.modulec;
 
+import no.ion.modulec.compiler.Release;
 import no.ion.modulec.compiler.multi.ModuleCompilationAndPackaging;
-import no.ion.modulec.compiler.multi.MultiModuleCompiler;
 import no.ion.modulec.compiler.multi.MultiModuleCompilationAndPackaging;
 import no.ion.modulec.compiler.multi.MultiModuleCompilationAndPackagingResult;
-import no.ion.modulec.compiler.Release;
-import no.ion.modulec.util.ModuleCompilerException;
+import no.ion.modulec.compiler.multi.MultiModuleCompiler;
 import no.ion.modulec.util.command.ArgumentException;
 import no.ion.modulec.util.command.Options;
 import no.ion.modulec.util.command.ProgramArgumentParser;

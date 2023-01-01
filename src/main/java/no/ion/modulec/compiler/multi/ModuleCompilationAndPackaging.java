@@ -3,7 +3,7 @@ package no.ion.modulec.compiler.multi;
 import no.ion.modulec.compiler.ModulePath;
 import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
-import no.ion.modulec.util.ModuleCompilerException;
+import no.ion.modulec.ModuleCompilerException;
 
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.Path;

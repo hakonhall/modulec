@@ -6,6 +6,7 @@ import no.ion.modulec.compiler.CompilationResult;
 import no.ion.modulec.compiler.Diagnostic;
 import no.ion.modulec.compiler.ModulePath;
 import no.ion.modulec.compiler.Release;
+import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
 import no.ion.modulec.file.SourceDirectory;
 
@@ -22,8 +23,10 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -42,6 +45,7 @@ class Javac {
 
     static class CompileParams {
         private Optional<String> debug = Optional.of(""); // => -g
+        private Pathname checksumFile = null;
         private Pathname classDirectory = null;
         private ModulePath modulePath = new ModulePath();
         private Pathname moduleInfo = null;
@@ -65,6 +69,11 @@ class Javac {
         /** The directory must exist. */
         CompileParams setClassDirectory(Pathname classDirectory) {
             this.classDirectory = Objects.requireNonNull(classDirectory, "classDirectory cannot be null");
+            return this;
+        }
+
+        CompileParams setCompilationChecksumFile(Pathname checksumFile) {
+            this.checksumFile = checksumFile;
             return this;
         }
 
@@ -131,10 +140,53 @@ class Javac {
         Charset charset() { return Charset.defaultCharset(); }
         Locale locale() { return Locale.getDefault(); }
         List<String> options() { return options; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CompileParams that = (CompileParams) o;
+            return verbose == that.verbose && Objects.equals(debug, that.debug) && Objects.equals(classDirectory, that.classDirectory) && Objects.equals(modulePath, that.modulePath) && Objects.equals(moduleInfo, that.moduleInfo) && Objects.equals(options, that.options) && Objects.equals(patches, that.patches) && Objects.equals(release, that.release) && Objects.equals(sourceDirectory, that.sourceDirectory) && Objects.equals(version, that.version) && Objects.equals(warnings, that.warnings);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(debug, classDirectory, modulePath, moduleInfo, options, patches, release, sourceDirectory, verbose, version, warnings);
+        }
     }
 
     CompilationResult compile(CompileParams compilation) {
         long startNanos = System.nanoTime();
+
+        final List<Pathname> sources;
+        Pathname moduleInfo = compilation.moduleInfo();
+        if (moduleInfo == null) {
+            sources = List.of(compilation.sourceDirectory);
+        } else if (moduleInfo.isFile()) {
+            sources = List.of(compilation.sourceDirectory, moduleInfo);
+        } else {
+            throw new UserErrorException("No such module declaration: " + moduleInfo);
+        }
+
+        final List<Path> javaPaths;
+        if (compilation.checksumFile == null) {
+            javaPaths = sources.stream().map(SourceDirectory::resolveSource).flatMap(List::stream).collect(Collectors.toList());
+        } else {
+            Optional<List<Path>> javaPaths2 = prepareClassDirectory(compilation.classDirectory,
+                                                                    sources,
+                                                                    compilation.verbose,
+                                                                    compilation.checksumFile,
+                                                                    compilation.hashCode());
+            if (javaPaths2.isEmpty())
+                return new CompilationResult(true,
+                                             0,
+                                             Duration.ofNanos(System.nanoTime() - startNanos),
+                                             List.of(),
+                                             "",
+                                             compilation.classDirectory.path(),
+                                             null);
+            javaPaths = javaPaths2.get();
+        }
 
         var collector = new DiagnosticCollector<JavaFileObject>();
         var writer = new StringWriter();
@@ -198,19 +250,6 @@ class Javac {
 
             javacEquivalentArguments.addAll(options);
 
-            final List<Path> javaPaths;
-            Pathname moduleInfo = compilation.moduleInfo();
-            if (moduleInfo == null) {
-                javaPaths = SourceDirectory.resolveSourceDirectory(compilation.sourceDirectory());
-            } else if (!moduleInfo.isFile()) {
-                throw new UserErrorException("No such module declaration: " + moduleInfo);
-            } else {
-                javaPaths = new ArrayList<>(SourceDirectory.resolveSourceDirectory(compilation.sourceDirectory()));
-                javaPaths.add(moduleInfo.path());
-            }
-
-            if (javaPaths.isEmpty())
-                return CompilationResult.ofError(startNanos, "error: no source files found in " + compilation.sourceDirectory());
             Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(javaPaths);
             compilationUnits.forEach(unit -> javacEquivalentArguments.add(unit.getName()));
 
@@ -246,8 +285,12 @@ class Javac {
                 .collect(Collectors.toList());
 
         String out = writer.toString();
+
+        if (compilation.checksumFile != null && success)
+            updateChecksumFile(compilation.checksumFile, compilation.hashCode());
+
         var duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new CompilationResult(success, duration, diagnostics, out,
+        return new CompilationResult(success, javaPaths.size(), duration, diagnostics, out,
                                      compilation.classDirectory().path(), exception);
     }
 
@@ -309,5 +352,132 @@ class Javac {
                     if ("_-@%/=+^.:".indexOf(cp) != -1) return false;
                     return true;
                 });
+    }
+
+    /**
+     * Remove files and directories from classDirectory that are no longer matched by source files.  Returns
+     * Optional.empty() if no source files needs to be recompiled.  Otherwise the *.java source files found in the
+     * source directories.
+     */
+    private Optional<List<Path>> prepareClassDirectory(Pathname classDirectory, List<Pathname> sources, boolean verbose,
+                                                       Pathname checksumFile, int checksum) {
+
+        // Optimization
+        if (!classDirectory.isDirectory() || classDirectory.isEmptyDirectory())
+            return Optional.of(sources.stream()
+                                      .map(SourceDirectory::resolveSource)
+                                      .flatMap(List::stream)
+                                      .collect(Collectors.toList()));
+
+        // A source file a/b/Foo.java relative a source directory should result in a whitelist of a/, a/b/, and a/b/Foo.
+        // This allows the directories a/ and a/b/ below the class directory, a a/b/Foo.class file, and any files in a/b/
+        // with a filename starting with Foo$ and ending in .class (e.g. nested classes of Foo).
+        Map<String, BasicAttributes> whitelist = new HashMap<>();
+
+        List<Path> javaFiles = sources
+                .stream()
+                .map(Pathname::normalize)
+                .flatMap(sourceDirectory -> sourceDirectory.find(true, (subpath, attributes) -> {
+                                                               if (!subpath.toString().endsWith(".java"))
+                                                                   return Optional.empty();
+
+                                                               String prefix = subpath.relative(sourceDirectory).normalize().toString();
+                                                               if (!prefix.endsWith(".java"))
+                                                                   return Optional.empty();
+                                                               prefix = prefix.substring(0, prefix.length() - ".java".length());
+
+                                                               do {
+                                                                   // This puts attributes also on parent dirs, which is not used for anything.
+                                                                   if (whitelist.put(prefix, attributes) != null)
+                                                                       break; // already added
+                                                                   int slashIndex = prefix.indexOf('/');
+                                                                   if (slashIndex == -1)
+                                                                       break;
+                                                                   prefix = prefix.substring(0, slashIndex + 1);
+                                                               } while (true);
+
+                                                               return Optional.of(subpath.path());
+                                                           })
+                                                           .stream())
+                .collect(Collectors.toList());
+
+        final boolean doDelete = false;
+        final Pathname normalizedClassDirectory = classDirectory.normalize();
+        final boolean[] mustCompile = { false };
+        normalizedClassDirectory.visit(false, false, (pathname, attributes) -> {
+            Pathname lookupKey = pathname.relative(normalizedClassDirectory).normalize();
+
+            if (attributes.isDirectory()) {
+                if (!whitelist.containsKey(lookupKey + "/")) {
+                    if (verbose)
+                        System.out.println("Deleting directory: " + pathname);
+                    if (doDelete) pathname.deleteRecursively();
+                    mustCompile[0] = true;
+                    return Pathname.VisitHint.SKIP;
+                }
+            } else if (attributes.isFile()) {
+                String stem = lookupKey.filename();
+                if (stem.endsWith(".class")) {
+                    stem = stem.substring(0, stem.length() - ".class".length());
+                    int dollarIndex = stem.indexOf('$');
+                    if (dollarIndex != -1)
+                        stem = stem.substring(0, dollarIndex);
+                    lookupKey = lookupKey.parent().resolve(stem).normalize();
+                    BasicAttributes sourceAttributes = whitelist.get(lookupKey.toString());
+                    if (sourceAttributes == null) {
+                        // source file deleted
+                        if (verbose)
+                            System.out.println("Deleting orphaned class file: " + pathname);
+                        if (doDelete) pathname.delete();
+                        mustCompile[0] = true;
+                    } else if (!sourceAttributes.lastModified().isBefore(attributes.lastModified())) {
+                        if (dollarIndex != -1) {
+                            if (verbose)
+                                System.out.println("Source about to be recompiled: Deleting derived class: " + pathname);
+                            if (doDelete) pathname.delete();
+                        }
+                        mustCompile[0] = true;
+                    }
+                } else {
+                    if (verbose)
+                        System.out.println("Deleting stray file: " + pathname);
+                    if (doDelete) pathname.delete();
+                    mustCompile[0] = true;
+                }
+            } else {
+                if (verbose)
+                    System.out.println("Deleting stray file: " + pathname);
+                if (doDelete) pathname.delete();
+                mustCompile[0] = true;
+            }
+
+            return Pathname.VisitHint.CONTINUE;
+        });
+
+        return mustCompile[0] || checksumHasChanged(checksumFile, checksum) ? Optional.of(javaFiles) : Optional.empty();
+    }
+
+    private boolean checksumHasChanged(Pathname file, int checksum) {
+        if (file == null) return true;
+
+        Optional<String> content = file.readUtf8IfExists();
+        if (content.isEmpty())
+            return true;
+
+        String previousChecksumAsString = content.get().strip();
+
+        final int previousChecksum;
+        try {
+            previousChecksum = Integer.parseInt(previousChecksumAsString);
+        } catch (NumberFormatException e) {
+            return true;
+        }
+
+        return checksum != previousChecksum;
+    }
+
+    private void updateChecksumFile(Pathname file, int checksum) {
+        if (checksumHasChanged(file, checksum))
+            file.writeUtf8(checksum + "\n");
     }
 }
