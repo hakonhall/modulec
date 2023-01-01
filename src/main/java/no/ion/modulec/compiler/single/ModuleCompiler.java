@@ -1,5 +1,7 @@
 package no.ion.modulec.compiler.single;
 
+import no.ion.modulec.Context;
+import no.ion.modulec.MessageSink;
 import no.ion.modulec.UserErrorException;
 import no.ion.modulec.compiler.ModulePath;
 import no.ion.modulec.compiler.Release;
@@ -15,21 +17,23 @@ import java.util.Objects;
 import java.util.Optional;
 
 public final class ModuleCompiler {
+    private final Context context;
     private final Javac compiler;
     private final Jar jar;
 
-    public ModuleCompiler() {
-        this(new Javac(), new Jar());
+    public ModuleCompiler(Context context) {
+        this(context, new Javac(context), new Jar(context));
     }
 
-    ModuleCompiler(Javac compiler, Jar jar) {
+    ModuleCompiler(Context context, Javac compiler, Jar jar) {
+        this.context = context;
         this.compiler = compiler;
         this.jar = jar;
     }
 
     public static final class MakeParams {
 
-        private final FileSystem fileSystem;
+        private final Context context;
 
         private Optional<String> debug = Optional.empty();
         private Pathname out = null;
@@ -43,12 +47,11 @@ public final class ModuleCompiler {
         private Optional<Pathname> testModuleInfo = Optional.empty();
         private final List<Pathname> testResourceDirectories = new ArrayList<>();
         private Optional<Pathname> testSourceDirectory = Optional.empty();
-        private boolean verbose = false;
         private ModuleDescriptor.Version version = null;
         private Optional<String> warnings = Optional.of("all");  // empty => no warnings, "all" => -Xlint, otherwise foo => -Xlint:foo.
 
-        public MakeParams(FileSystem fileSystem) {
-            this.fileSystem = fileSystem;
+        public MakeParams(Context context) {
+            this.context = context;
         }
 
         /** Same as javac's -g:debug.  But "" means -g.  If not called, -g will not be passed to javac. */
@@ -118,11 +121,6 @@ public final class ModuleCompiler {
             return this;
         }
 
-        public MakeParams setVerbose(boolean verbose) {
-            this.verbose = verbose;
-            return this;
-        }
-
         public MakeParams setVersion(ModuleDescriptor.Version version) {
             this.version = Objects.requireNonNull(version, "version cannot be null");
             return this;
@@ -133,6 +131,10 @@ public final class ModuleCompiler {
             this.warnings = warnings;
             return this;
         }
+
+        public Context context() { return context; }
+        public FileSystem fileSystem() { return context.fileSystem(); }
+        public MessageSink log() { return context.log(); }
 
         public Optional<String> debug() { return debug; }
         public Pathname out() { return out; }
@@ -147,7 +149,6 @@ public final class ModuleCompiler {
         public Optional<Pathname> testModuleInfo() { return testModuleInfo; }
         public List<Pathname> testResourceDirectories() { return testResourceDirectories; }
         public Optional<Pathname> testSourceDirectory() { return testSourceDirectory; }
-        public boolean verbose() { return verbose; }
         public ModuleDescriptor.Version version() { return version; }
         public Optional<String> warnings() { return warnings; }
     }

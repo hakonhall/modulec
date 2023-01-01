@@ -1,19 +1,22 @@
 package no.ion.modulec.jar;
 
-import no.ion.modulec.file.Pathname;
+import no.ion.modulec.Context;
 import no.ion.modulec.ModuleCompilerException;
+import no.ion.modulec.file.Pathname;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.module.ModuleDescriptor;
 import java.util.ArrayList;
 import java.util.spi.ToolProvider;
-import java.util.stream.Collectors;
 
 public class Jar {
+    private final Context context;
     private final ToolProvider jarTool;
-    public Jar() {
-        jarTool = ToolProvider.findFirst("jar").orElseThrow(() -> new ModuleCompilerException("No jar tool found"));
+
+    public Jar(Context context) {
+        this.context = context;
+        this.jarTool = ToolProvider.findFirst("jar").orElseThrow(() -> new ModuleCompilerException("No jar tool found"));
     }
 
     public PackagingResult pack(ModulePackaging packaging) {
@@ -55,8 +58,7 @@ public class Jar {
         var printWriter = new PrintWriter(writer);
         String[] args = arguments.toArray(String[]::new);
 
-        if (packaging.verbose())
-            System.out.println(arguments.stream().collect(Collectors.joining(" ", "jar ", "")));
+        context.log().command("jar", arguments);
 
         // JarToolProvider returns 0 on success and 1 on failure.
         boolean success = jarTool.run(printWriter, printWriter, args) == 0;

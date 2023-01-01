@@ -105,23 +105,23 @@ class SingleModuleCompilation {
         CompilationResult result = javac.compile(compileParams);
         String message = result.makeMessage();
         if (!message.isEmpty())
-            System.out.print(message);
+            params.log().info(message);
         if (!result.success())
             throw new ModuleCompilerException(result.makeMessage()).setMultiLine(true).setSilent(true);
-        if (params.verbose()) {
-            if (result.noop()) {
-                System.out.printf("compiled no source files in %s to %s in %.3fs [up to date]%n",
-                                  compileParams.sourceDirectory(),
-                                  result.destination(),
-                                  result.duration().toNanos() / 1_000_000_000d);
-            } else {
-                System.out.printf("compiled %d source files in %s to %s in %.3fs%n",
-                                  result.sourceFiles(),
-                                  compileParams.sourceDirectory(),
-                                  result.destination(),
-                                  result.duration().toNanos() / 1_000_000_000d);
-            }
+
+        if (result.noop()) {
+            params.log().milestone("compiled no source files in %s to %s in %.3fs [up to date]%n",
+                                   compileParams.sourceDirectory(),
+                                   result.destination(),
+                                   result.duration().toNanos() / 1_000_000_000d);
+        } else {
+            params.log().milestone("compiled %d source files in %s to %s in %.3fs%n",
+                                   result.sourceFiles(),
+                                   compileParams.sourceDirectory(),
+                                   result.destination(),
+                                   result.duration().toNanos() / 1_000_000_000d);
         }
+
         return result;
     }
 
@@ -132,7 +132,6 @@ class SingleModuleCompilation {
                                         .setClassDirectory(output.outputClassDirectory())
                                         .setCompilationChecksumFile(output.compilationChecksumFile())
                                         .setRelease(params.release())
-                                        .setVerbose(params.verbose())
                                         .setVersion(params.version())
                                         .setWarnings(params.warnings());
     }
@@ -153,7 +152,6 @@ class SingleModuleCompilation {
                                                                      .setRelease(params.release())
                                                                      .setClassDirectory(output.outputTestClassDirectory())
                                                                      .setCompilationChecksumFile(output.testCompilationChecksumFile())
-                                                                     .setVerbose(params.verbose())
                                                                      .setVersion(params.version())
                                                                      .setWarnings(params.warnings());
         params.testModuleInfo().ifPresent(compileParams::setModuleInfo);
@@ -161,8 +159,7 @@ class SingleModuleCompilation {
     }
 
     private ModulePackaging jarPackaging() {
-        ModulePackaging modulePackaging = ModulePackaging.forCreatingJar(output.jarPathname().path())
-                                                         .setVerbose(params.verbose());
+        ModulePackaging modulePackaging = ModulePackaging.forCreatingJar(output.jarPathname().path());
         mainClass.ifPresent(modulePackaging::setMainClass);
         modulePackaging.addDirectoryTree(sourceCompilationResult.destination());
         params.resourceDirectories().stream().map(Pathname::path).forEach(modulePackaging::addDirectoryTree);
@@ -172,8 +169,7 @@ class SingleModuleCompilation {
     private ModulePackaging testJarPackaging() {
         output.jarPathname().copyTo(output.testJarPathname(), StandardCopyOption.REPLACE_EXISTING);
 
-        ModulePackaging packaging = ModulePackaging.forUpdatingJar(output.testJarPathname().path())
-                                                   .setVerbose(params.verbose());
+        ModulePackaging packaging = ModulePackaging.forUpdatingJar(output.testJarPathname().path());
         packaging.addDirectoryTree(testSourceCompilationResult.destination());
         params.testResourceDirectories().stream().map(Pathname::path).forEach(packaging::addDirectoryTree);
         return packaging;
@@ -185,8 +181,7 @@ class SingleModuleCompilation {
         PackagingResult result = jar.pack(packaging);
         if (!result.success())
             throw new ModuleCompilerException(result.out()).setMultiLine(true);
-        if (params.verbose())
-            System.out.printf("packaged %s%n", result.pathname());
+        params.log().milestone("packaged %s%n", result.pathname());
         return result;
     }
 
@@ -210,13 +205,7 @@ class SingleModuleCompilation {
             Thread.currentThread().setContextClassLoader(moduleLoader);
             int exitCode;
             try {
-                if (params.verbose()) {
-                    System.out.printf("javahms -p %s -c %s -m %s %s%n",
-                                      modulePathString,
-                                      moduleName,
-                                      testBooterModule,
-                                      testJarResult.pathname());
-                }
+                params.log().command("javahms", "-p", modulePathString, "-c", moduleName, "-m", testBooterModule, testJarResult.pathname().toString());
                 exitCode = testBooter.intCall("runTests", Argument.of(Path.class, testJarResult.pathname().path()));
             } finally {
                 Thread.currentThread().setContextClassLoader(savedContext);
@@ -352,8 +341,7 @@ class SingleModuleCompilation {
             throw new UncheckedIOException(e);
         }
 
-        if (params.verbose())
-            System.out.println("Wrote " + programPath);
+        params.log().milestone("Wrote " + programPath);
     }
 
     private byte[] utf8Stub(String mainClass) {

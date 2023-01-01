@@ -4,13 +4,14 @@ import no.ion.modulec.compiler.CompilationResult;
 import no.ion.modulec.jar.Jar;
 import no.ion.modulec.jar.ModulePackaging;
 import no.ion.modulec.jar.PackagingResult;
+import no.ion.modulec.modco.ProgramContext;
 
 import java.util.Map;
 import java.util.TreeMap;
 
 public class MultiModuleCompiler {
     private final Compiler compiler = new Compiler();
-    private final Jar jar = new Jar();
+    private final Jar jar = new Jar(new ProgramContext());
 
     public MultiModuleCompilationAndPackagingResult make(MultiModuleCompilationAndPackaging job) {
         CompilationResult cResult = compiler.compile(job);

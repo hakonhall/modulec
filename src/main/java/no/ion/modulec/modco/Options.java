@@ -8,7 +8,6 @@ import no.ion.modulec.compiler.single.ModuleCompiler;
 import no.ion.modulec.file.Pathname;
 
 import java.lang.module.ModuleDescriptor;
-import java.nio.file.FileSystem;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -23,24 +22,25 @@ public class Options {
 
     public ModuleCompiler.MakeParams params() { return params; }
 
-    public static Options parse(FileSystem fileSystem, String... args) {
+    public static Options parse(ProgramContext context, String... args) {
         String debug = "";  // Equivalent to javac's -g
-        Pathname out = Pathname.of(fileSystem.getPath("out"));
+        Pathname out = Pathname.of(context.fileSystem().getPath("out"));
         String mainClass = null;
         ModulePath modulePath = null;
         boolean testing = true;
         List<ProgramSpec> programs = new ArrayList<>();
         Release release = Release.ofJre();
+        boolean showCommands = false;
+        boolean showDebug = false;
         Pathname sourceDirectory = null;
         List<Pathname> resourceDirectories = new ArrayList<>();
         Pathname testModuleInfo = null;
         Pathname testSourceDirectory = null;
         List<Pathname> testResourceDirectories = new ArrayList<>();
-        boolean verbose = false;
         ModuleDescriptor.Version version = null;
         String warnings = "all";
 
-        var arguments = new ProgramArgumentIterator(fileSystem, args);
+        var arguments = new ProgramArgumentIterator(context.fileSystem(), args);
         for (; !arguments.atEnd(); arguments.next()) {
             switch (arguments.arg()) {
                 case "-g":
@@ -60,7 +60,7 @@ public class Options {
                     continue;
                 case "-p":
                 case "--module-path":
-                    modulePath = new ModulePath().addFromColonSeparatedString(fileSystem, arguments.getOptionValueString());
+                    modulePath = new ModulePath().addFromColonSeparatedString(context.fileSystem(), arguments.getOptionValueString());
                     continue;
                 case "--no-testing":
                     testing = false;
@@ -118,7 +118,8 @@ public class Options {
                     continue;
                 case "-b":
                 case "--verbose":
-                    verbose = true;
+                    showCommands = true;
+                    showDebug = true;
                     continue;
                 case "-v":
                 case "--version":
@@ -141,7 +142,10 @@ public class Options {
             break;
         }
 
-        ModuleCompiler.MakeParams params = new ModuleCompiler.MakeParams(fileSystem);
+        context.showCommands(showCommands);
+        context.showDebug(showDebug);
+        context.showMilestones(true);
+        ModuleCompiler.MakeParams params = new ModuleCompiler.MakeParams(context);
 
         if (debug != null)
             params.setDebug(debug);
@@ -177,8 +181,6 @@ public class Options {
         }
         programs.forEach(params::addProgram);
 
-        params.setVerbose(verbose);
-
         if (version == null)
             throw new UserErrorException("Missing required option '--version'");
         params.setVersion(version);
@@ -187,23 +189,23 @@ public class Options {
 
         // Maven layout
         if (sourceDirectory == null) {
-            Pathname srcMainJava = Pathname.of(fileSystem.getPath("src/main/java"));
+            Pathname srcMainJava = Pathname.of(context.fileSystem().getPath("src/main/java"));
             if (srcMainJava.isDirectory()) {
                 if (!srcMainJava.resolve("module-info.java").isFile())
                     throw new UserErrorException("Missing module declaration: src/main/java/module-info.java");
                 sourceDirectory = srcMainJava;
                 if (resourceDirectories.isEmpty()) {
-                    Pathname srcMainResources = Pathname.of(fileSystem.getPath("src/main/resources"));
+                    Pathname srcMainResources = Pathname.of(context.fileSystem().getPath("src/main/resources"));
                     if (srcMainResources.isDirectory())
                         resourceDirectories.add(srcMainResources);
                 }
                 if (testSourceDirectory == null) {
-                    Pathname srcTestJava = Pathname.of(fileSystem.getPath("src/test/java"));
+                    Pathname srcTestJava = Pathname.of(context.fileSystem().getPath("src/test/java"));
                     if (srcTestJava.isDirectory())
                         testSourceDirectory = srcTestJava;
                 }
                 if (testResourceDirectories.isEmpty()) {
-                    Pathname srcTestResources = Pathname.of(fileSystem.getPath("src/test/resources"));
+                    Pathname srcTestResources = Pathname.of(context.fileSystem().getPath("src/test/resources"));
                     if (srcTestResources.isDirectory())
                         testResourceDirectories.add(srcTestResources);
                 }
@@ -212,7 +214,7 @@ public class Options {
 
         // Custom layout
         if (sourceDirectory == null) {
-            Pathname src = Pathname.of(fileSystem.getPath("src"));
+            Pathname src = Pathname.of(context.fileSystem().getPath("src"));
             if (src.isDirectory()) {
                 if (src.resolve("module-info.java").isFile()) {
                     sourceDirectory = src;
@@ -221,7 +223,7 @@ public class Options {
                 }
 
                 if (testSourceDirectory == null) {
-                    Pathname test = Pathname.of(fileSystem.getPath("test"));
+                    Pathname test = Pathname.of(context.fileSystem().getPath("test"));
                     if (test.isDirectory())
                         testSourceDirectory = test;
                 }
@@ -242,7 +244,7 @@ public class Options {
         }
 
         if (out == null)
-            out = Pathname.of(fileSystem, "out");
+            out = Pathname.of(context.fileSystem(), "out");
         params.setOut(out);
 
         if (modulePath != null)
