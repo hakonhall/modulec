@@ -40,14 +40,20 @@ public record CompilationResult(boolean success, int sourceFiles, Duration durat
                 case WARNING, MANDATORY_WARNING -> warnings++;
             }
 
-            if (diagnostic.source().isPresent()) {
-                diagnostic.lineNumber().ifPresent(lineNumber -> {
-                    // E.g. the message "error: warnings found and -Werror specified" comes in a diagnostic
-                    // with a source (the last processed?), but no line number.
-                    buffer.append(diagnostic.source().get().getName());
-                    buffer.append(':').append(lineNumber);
-                    buffer.append(": ");
-                });
+            if (diagnostic.source().isPresent() &&
+                // E.g. the message "error: warnings found and -Werror specified" comes in a diagnostic
+                // with a source (the last processed?), but no line number.
+                (diagnostic.lineNumber().isPresent() ||
+                 // On the other hand, the message "junit5/mod/junit-jupiter-api-5.9.1.jar(/org/junit/jupiter/api/Test.class):
+                 // warning: Cannot find annotation method 'status()' in type 'API': class file for org.apiguardian.api.API not found"
+                 // has location but is a warning.
+                 diagnostic.kind() == javax.tools.Diagnostic.Kind.WARNING)) {
+
+                buffer.append(diagnostic.source().get().getName())
+                      .append(':');
+                diagnostic.lineNumber().ifPresent(lineNumber -> buffer.append(lineNumber)
+                                                                      .append(':'));
+                buffer.append(' ');
             }
 
             if (diagnostic.kind() == javax.tools.Diagnostic.Kind.ERROR) {
@@ -56,14 +62,20 @@ public record CompilationResult(boolean success, int sourceFiles, Duration durat
                        diagnostic.kind() == javax.tools.Diagnostic.Kind.MANDATORY_WARNING) {
                 buffer.append("warning: ");
                 diagnostic.code().ifPresent(code -> {
+                    // TODO: this is printed to hint of SuppressWarnings, but not otherwise.
+                    buffer.append('[').append(code).append("] ");
                     int lastDot = code.lastIndexOf('.');
                     if (lastDot >= 0) {
                         code = code.substring(lastDot + 1);
                     }
-                    buffer.append('[').append(code).append("] ");
+                    //buffer.append('[').append(code).append("] ");
                 });
             }
-            buffer.append(diagnostic.message()).append('\n');
+            // A message WITH a newline is split in two, with 2 lines pointing to the code line and column
+            // in between.
+            String message = diagnostic.message();
+            int newlineIndex = message.indexOf('\n');
+            buffer.append(newlineIndex >= 0 ? message.substring(0, newlineIndex + 1) : message + '\n');
 
             diagnostic.lineNumber().ifPresent(lineno -> {
                 CharSequence charSequence = uncheckIO(() -> diagnostic.source().get().getCharContent(true));
@@ -81,6 +93,9 @@ public record CompilationResult(boolean success, int sourceFiles, Duration durat
                     }
                 }
             });
+
+            if (newlineIndex >= 0)
+                buffer.append(message.substring(newlineIndex + 1)).append('\n');
         }
 
         if (errors > 0)

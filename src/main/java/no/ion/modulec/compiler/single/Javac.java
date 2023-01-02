@@ -34,6 +34,7 @@ import java.util.OptionalLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static no.ion.modulec.util.Exceptions.uncheckIO;
 
@@ -159,7 +160,7 @@ class Javac {
         if (moduleInfo == null) {
             sources = List.of(compilation.sourceDirectory);
         } else if (moduleInfo.isFile()) {
-            sources = List.of(compilation.sourceDirectory, moduleInfo);
+            sources = List.of(moduleInfo, compilation.sourceDirectory);
         } else {
             throw new UserErrorException("No such module declaration: " + moduleInfo);
         }
@@ -369,28 +370,40 @@ class Javac {
         List<Path> javaFiles = sources
                 .stream()
                 .map(Pathname::normalize)
-                .flatMap(sourceDirectory -> sourceDirectory.find(true, (subpath, attributes) -> {
-                                                               if (!subpath.toString().endsWith(".java"))
-                                                                   return Optional.empty();
+                .flatMap(source -> {
+                    // Special-case the module-info.java "source", as the only non-directory source
+                    if (source.filename().equals("module-info.java")) {
+                        whitelist.put("module-info", source.readAttributes(true));
+                        return Stream.of(source.path());
+                    }
 
-                                                               String prefix = subpath.relative(sourceDirectory).normalize().toString();
-                                                               if (!prefix.endsWith(".java"))
-                                                                   return Optional.empty();
-                                                               prefix = prefix.substring(0, prefix.length() - ".java".length());
+                    return source.find(true, (subpath, attributes) -> {
+                        if (!subpath.toString().endsWith(".java"))
+                            return Optional.empty();
 
-                                                               do {
-                                                                   // This puts attributes also on parent dirs, which is not used for anything.
-                                                                   if (whitelist.put(prefix, attributes) != null)
-                                                                       break; // already added
-                                                                   int slashIndex = prefix.indexOf('/');
-                                                                   if (slashIndex == -1)
-                                                                       break;
-                                                                   prefix = prefix.substring(0, slashIndex + 1);
-                                                               } while (true);
+                        if (source.normalize().toString().equals(subpath.normalize().toString()))
+                            if (!attributes.isDirectory())
+                                return Optional.of(subpath.path());
 
-                                                               return Optional.of(subpath.path());
-                                                           })
-                                                           .stream())
+                            String prefix = subpath.relative(source).normalize().toString();
+                            if (!prefix.endsWith(".java"))
+                                return Optional.empty();
+                            prefix = prefix.substring(0, prefix.length() - ".java".length());
+                            whitelist.put(prefix, attributes);
+
+                            do {
+                                int slashIndex = prefix.lastIndexOf('/');
+                                if (slashIndex == -1)
+                                    break;
+                                prefix = prefix.substring(0, slashIndex);
+                                if (whitelist.put(prefix + '/', attributes) != null)
+                                    break; // already added
+                            } while (true);
+
+                            return Optional.of(subpath.path());
+                    })
+                                 .stream();
+                })
                 .collect(Collectors.toList());
 
         final Pathname normalizedClassDirectory = classDirectory.normalize();

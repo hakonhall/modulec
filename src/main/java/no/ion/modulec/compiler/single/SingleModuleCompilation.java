@@ -110,12 +110,12 @@ class SingleModuleCompilation {
             throw new ModuleCompilerException(result.makeMessage()).setMultiLine(true).setSilent(true);
 
         if (result.noop()) {
-            params.log().milestone("compiled no source files in %s to %s in %.3fs [up to date]%n",
+            params.log().milestone("compiled no source files in %s to %s in %.3fs [up to date]",
                                    compileParams.sourceDirectory(),
                                    result.destination(),
                                    result.duration().toNanos() / 1_000_000_000d);
         } else {
-            params.log().milestone("compiled %d source files in %s to %s in %.3fs%n",
+            params.log().milestone("compiled %d source files in %s to %s in %.3fs",
                                    result.sourceFiles(),
                                    compileParams.sourceDirectory(),
                                    result.destination(),
@@ -181,7 +181,7 @@ class SingleModuleCompilation {
         PackagingResult result = jar.pack(packaging);
         if (!result.success())
             throw new ModuleCompilerException(result.out()).setMultiLine(true);
-        params.log().milestone("packaged %s%n", result.pathname());
+        params.log().milestone("packaged %s", result.pathname());
         return result;
     }
 

@@ -24,7 +24,7 @@ public interface MessageSink {
     default void infoFormat(String format, Object... args) { info(format.formatted(args)); }
 
     /** A milestone has been reached, e.g. "compiled 2 source files in src/main/java to out/classes in 0.1s". */
-    default void milestone(String achievement) { log(Type.MILESTONE, achievement); }
+    default void milestone(String achievement) { log(Type.MILESTONE, achievement + '\n'); }
     default void milestone(String format, Object... args) { milestone(format.formatted(args)); }
 
     /** A significant command is about to be invoked, e.g. ["javac", "-d", "classes", "src/Foo.java"]. */
