@@ -312,41 +312,6 @@ class Javac {
         return position == javax.tools.Diagnostic.NOPOS ? OptionalLong.empty() : OptionalLong.of(position);
     }
 
-    private static String escapeArgument(String argument) {
-        if (!needQuoting(argument)) return argument;
-
-        StringBuilder escaped = new StringBuilder().append('"');
-
-        argument.codePoints()
-                .forEach(cp -> {
-                    switch (cp) {
-                        case '$':
-                        case '`':
-                        case '"':
-                        case '\\':
-                        case '\n':
-                            escaped.append("\\").append(Character.toString(cp));
-                            break;
-                        default:
-                            escaped.append(Character.toString(cp));
-                    }
-                });
-
-        escaped.append('"');
-        return escaped.toString();
-    }
-
-    private static boolean needQuoting(String argument) {
-        return argument.codePoints()
-                .anyMatch(cp -> {
-                    if ('a' <= cp && cp <= 'z') return false;
-                    if ('A' <= cp && cp <= 'Z') return false;
-                    if ('0' <= cp && cp <= '9') return false;
-                    if ("_-@%/=+^.:".indexOf(cp) != -1) return false;
-                    return true;
-                });
-    }
-
     /**
      * Remove files and directories from classDirectory that are no longer matched by source files.  Returns
      * Optional.empty() if no source files needs to be recompiled.  Otherwise the *.java source files found in the
