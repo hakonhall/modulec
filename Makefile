@@ -34,8 +34,9 @@ target/junit.ts: target/no.ion.modulec-1.0.0.jar $(TEST_FILES)
 	java -jar lib/junit-platform-console-standalone-1.6.2.jar --disable-banner -E junit-vintage --fail-if-no-tests --config junit.jupiter.execution.parallel.enabled=true -cp target/no.ion.modulec-1.0.0.jar -cp target/test-classes -cp lib/jimfs-1.1.jar -cp lib/guava-18.0.jar --scan-class-path target/test-classes
 	touch $@
 
-target/modco: bin/modco.sh target/no.ion.modulec-1.0.0.jar
-	cat $^ > $@
+target/modco: target/no.ion.modulec-1.0.0.jar
+	bin/make-modco.sh $@
+	cat $< >> $@
 	chmod +x $@
 
 ~/bin:

@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
@@ -56,17 +57,18 @@ public class FatJar {
                                   List<FatJarSpec.AddSpec> adds) throws IOException {
         Map<String, Pathname> additions = new HashMap<>();
         adds.forEach(spec -> {
-            Pathname previousPathname = additions.put(spec.pathInJar(), spec.filePathname());
-            if (previousPathname != null) {
-                if (!Objects.equals(previousPathname.path().normalize(),
-                                    spec.filePathname().path().normalize())) {
+            if (additions.containsKey(spec.pathInJar())) {
+                Pathname previousPathname = additions.get(spec.pathInJar());
+                if (!Objects.equals(Optional.ofNullable(previousPathname).map(Pathname::normalize),
+                                    Optional.ofNullable(spec.filePathname()).map(Pathname::normalize))) {
                     throw new ModuleCompilerException("Duplicate entry for " + spec.pathInJar() + ": " +
                                                       spec.filePathname() + " vs " + previousPathname);
                 }
             }
+            additions.put(spec.pathInJar(), spec.filePathname());
 
             // Validate now that we anyway are looping over the add-specs
-            if (!spec.filePathname().isFile())
+            if (spec.filePathname() != null && !spec.filePathname().isFile())
                 throw new ModuleCompilerException("Unable to add " + spec.filePathname() + " to " +
                                                   outputPath + ": Not a file");
         });
@@ -74,22 +76,30 @@ public class FatJar {
         for (Enumeration<JarEntry> jarEntries = baseJar.entries(); jarEntries.hasMoreElements();) {
             JarEntry entry = jarEntries.nextElement();
             String entryPath = entry.getName();
-            Pathname overridingPathname = additions.remove(entryPath);
-            if (overridingPathname == null) {
+            if (additions.containsKey(entryPath)) {
+                Pathname overridingPathname = additions.remove(entryPath);
+                // Instead of the entry in baseJar, copy the replacement to outputJar.
+                if (entryPath.endsWith("/")) {
+                    // I.e. directory
+                    JarEntry newEntry = new JarEntry(entryPath);
+                    outputJar.putNextEntry(newEntry);
+                    outputJar.closeEntry();
+                } else {
+                    // I.e. regular file
+                    File overridingFile = overridingPathname.file();
+                    JarEntry newEntry = new JarEntry(entryPath);
+                    newEntry.setTime(overridingFile.lastModified());
+                    outputJar.putNextEntry(newEntry);
+                    try (InputStream inputStream = Files.newInputStream(overridingPathname.path())) {
+                        inputStream.transferTo(outputJar);
+                    }
+                    outputJar.closeEntry();
+                }
+            } else {
                 // Copy the entry from baseJar to outputJar.
                 JarEntry newEntry = new JarEntry(entry);
                 outputJar.putNextEntry(newEntry);
                 try (InputStream inputStream = baseJar.getInputStream(entry)) {
-                    inputStream.transferTo(outputJar);
-                }
-                outputJar.closeEntry();
-            } else {
-                // Instead of the entry in baseJar, copy the replacement to outputJar.
-                File overridingFile = overridingPathname.file();
-                JarEntry newEntry = new JarEntry(entryPath);
-                newEntry.setTime(overridingFile.lastModified());
-                outputJar.putNextEntry(newEntry);
-                try (InputStream inputStream = Files.newInputStream(overridingPathname.path())) {
                     inputStream.transferTo(outputJar);
                 }
                 outputJar.closeEntry();
@@ -98,13 +108,19 @@ public class FatJar {
 
         // Add all files not already added
         additions.forEach((pathInJar, pathnameOnDisk) -> {
+            JarEntry newEntry = new JarEntry(pathInJar);
+
             try {
-                JarEntry newEntry = new JarEntry(pathInJar);
-                newEntry.setTime(pathnameOnDisk.file().lastModified());
-                outputJar.putNextEntry(newEntry);
-                try (InputStream inputStream = Files.newInputStream(pathnameOnDisk.path())) {
-                    inputStream.transferTo(outputJar);
+                if (pathInJar.endsWith("/")) {
+                    outputJar.putNextEntry(newEntry);
+                } else {
+                    newEntry.setTime(pathnameOnDisk.file().lastModified());
+                    outputJar.putNextEntry(newEntry);
+                    try (InputStream inputStream = Files.newInputStream(pathnameOnDisk.path())) {
+                        inputStream.transferTo(outputJar);
+                    }
                 }
+
                 outputJar.closeEntry();
             } catch (IOException e) {
                 throw new UncheckedIOException(e);

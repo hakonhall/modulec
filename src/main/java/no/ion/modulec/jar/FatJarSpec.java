@@ -11,7 +11,22 @@ public class FatJarSpec {
     private byte[] header = null;
     private final List<AddSpec> adds = new ArrayList<>();
 
-    public static record AddSpec(Pathname filePathname, String pathInJar) {}
+    public static record AddSpec(Pathname filePathname, String pathInJar) {
+        public AddSpec {
+            if (pathInJar == null)
+                throw new NullPointerException("pathInJar cannot be null");
+
+            if (pathInJar.endsWith("/")) {
+                if (filePathname != null)
+                    throw new IllegalArgumentException("A directory JAR entry (" + pathInJar + ") with a disk location: " +
+                                                       filePathname);
+            } else {
+                if (filePathname == null)
+                    throw new IllegalArgumentException("A file JAR entry (" + pathInJar + ") without a disk location");
+            }
+        }
+        public boolean isDirectory() { return pathInJar.endsWith("/"); }
+    }
 
     public FatJarSpec(Pathname baseJar, Pathname outputJar) {
         this.baseJar = baseJar;
@@ -20,6 +35,13 @@ public class FatJarSpec {
 
     public FatJarSpec addHeader(byte[] header) {
         this.header = header;
+        return this;
+    }
+
+    public FatJarSpec addDirectory(String pathInJar) {
+        if (!pathInJar.endsWith("/"))
+            pathInJar += "/";
+        adds.add(new AddSpec(null, pathInJar));
         return this;
     }
 

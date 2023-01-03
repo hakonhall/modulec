@@ -294,6 +294,7 @@ class SingleModuleCompilation {
         FatJar fatJar = new FatJar();
         Pathname jhmsJarPathname = jhmsJarPathname(fatJarPath.fileSystem());
         FatJarSpec spec = new FatJarSpec(jhmsJarPathname, fatJarPath);
+        spec.addDirectory(FatJar.MODULE_DIRECTORY);
         transitiveJars.values().forEach(info -> spec.addFile(info.location(), pathOfModuleInJar(info)));
         fatJar.extend(spec);
     }
