@@ -68,6 +68,9 @@ public class Release {
 
     @Override
     public int hashCode() {
-        return Objects.hash(release, sourceVersion);
+        // Seems like sourceVersion.hashCode() has some deterministic randomness to it.  Run clean, modco, modco,
+        // the first modco always had one sourceVersion.hashCode() while the second had another.  They both had the same
+        // value RELEASE_17.
+        return Objects.hash(release, sourceVersion.name());
     }
 }

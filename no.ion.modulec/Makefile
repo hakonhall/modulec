@@ -12,9 +12,9 @@ TEST_DEPS := target/no.ion.modulec-1.0.0.jar:lib/junit-platform-console-standalo
 
 default: junit
 
-junit: bin/modulec-shebang target/modc target/junit.ts target/modco
+junit: ~/bin target/modc target/junit.ts target/modco
 
-target/modc: bin/modc.sh target/no.ion.modulec-1.0.0.jar
+target/modc: target/no.ion.modulec-1.0.0.jar
 	cat $^ > $@
 	chmod +x $@
 
@@ -24,7 +24,7 @@ target/no.ion.modulec-1.0.0.jar:
 #target/no.ion.modulec-1.0.0.jar: Makefile pom.xml $(JAVA_SOURCES)
 #	bin/modulec.sh -v 1.0.0 -e no.ion.modulec.ModuleCompiler2 src/main/java
 
-bin/modulec-shebang: src/main/java/no/ion/modulec/ModuleCompiler.java
+bin/modulec-shebang: src
 	printf "#!/home/hakon/share/jdk-11/bin/java --source 11\n\n" > $@
 	cat $< >> $@
 	chmod +x $@
@@ -43,6 +43,7 @@ target/modco: target/no.ion.modulec-1.0.0.jar
 	mkdir $@
 
 ~/bin/modulec:
+	rm -f ~/bin/modulec
 	ln -s $(PWD)/bin/modulec-wrapper.sh ~/bin/modulec
 
 ~/bin/modc: target/modc ~/bin
