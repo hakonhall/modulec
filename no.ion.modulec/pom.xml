@@ -16,7 +16,7 @@
   <dependencies>
     <dependency>
       <groupId>no.ion</groupId>
-      <artifactId>jhms</artifactId>
+      <artifactId>no.ion.jhms</artifactId>
       <version>3.0.0</version>
       <scope>system</scope>
       <systemPath>${project.basedir}/lib/no.ion.jhms-3.0.0.jar</systemPath>
