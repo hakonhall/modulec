@@ -14,7 +14,7 @@ default: junit
 
 junit: ~/bin target/modc target/junit.ts target/modco
 
-target/modc: target/no.ion.modulec-1.0.0.jar
+target/modc: bin/modc.sh target/no.ion.modulec-1.0.0.jar
 	cat $^ > $@
 	chmod +x $@
 
