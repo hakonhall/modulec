@@ -10,7 +10,7 @@ TEST_DEPS := target/no.ion.modulec-1.0.0.jar:lib/junit-platform-console-standalo
 
 .PHONY: default mvn junit clean install uninstall target/no.ion.modulec-1.0.0.jar
 
-default: junit
+all: junit
 
 junit: ~/bin target/modc target/junit.ts target/modco
 
@@ -55,7 +55,7 @@ target/modco: target/no.ion.modulec-1.0.0.jar
 	cp $< $@
 
 clean:
-	rm -rf target
+	mvn clean
 
 install: ~/bin ~/bin/modulec ~/bin/modc ~/bin/modco
 
