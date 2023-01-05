@@ -193,7 +193,7 @@ class SingleModuleCompilation {
                                       modulePath.toColonSeparatedString() + ":" + testJarResult.pathname().toString();
             container.discoverHybridModulesFromModulePath(modulePathString);
 
-            String testBooterModule = "no.ion.jhms.test.junit";
+            String testBooterModule = "no.ion.modulec.junit";
             RootHybridModule testBooter = container.resolve(new HybridModuleContainer
                     .ResolveParams(testBooterModule)
                     .requireVersion("5.9.1"));

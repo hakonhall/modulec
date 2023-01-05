@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>no.ion.jhms.test</groupId>
-    <artifactId>junit</artifactId>
+    <groupId>no.ion</groupId>
+    <artifactId>no.ion.modulec.junit</artifactId>
     <version>5.9.1</version>
 
     <properties>
@@ -13,7 +13,6 @@
     </properties>
 
     <build>
-        <finalName>no.ion.jhms.test.junit-${project.version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
