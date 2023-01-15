@@ -12,7 +12,6 @@ import java.lang.module.ModuleDescriptor;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MultiModuleCompilationAndPackagingTest {
@@ -52,10 +51,8 @@ public class MultiModuleCompilationAndPackagingTest {
 
         MultiModuleCompilationAndPackagingResult result = compiler.make(compilation);
 
-        assertEquals("", result.cResult().makeMessage(), "Unexpected message: " + result.cResult().makeMessage());
+        assertEquals("", result.cResult().message(), "Unexpected message: " + result.cResult().message());
         assertTrue(result.cResult().success());
-        assertEquals("", result.cResult().out());
-        assertNull(result.cResult().exception());
 
         assertTrue(workDirectory.resolve("out").isDirectory());
         assertTrue(workDirectory.resolve("out/no.ion.exampleA").isDirectory());
@@ -101,9 +98,7 @@ public class MultiModuleCompilationAndPackagingTest {
 
         MultiModuleCompilationAndPackagingResult result = compiler.make(compilation);
 
-        assertEquals("", result.cResult().makeMessage(), "Unexpected message: " + result.cResult().makeMessage());
+        assertEquals("", result.cResult().message(), "Unexpected message: " + result.cResult().message());
         assertTrue(result.cResult().success());
-        assertEquals("", result.cResult().out());
-        assertNull(result.cResult().exception());
     }
 }

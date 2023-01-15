@@ -1,5 +1,7 @@
 package no.ion.modulec.compiler;
 
+import no.ion.modulec.ResultType;
+
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -7,25 +9,41 @@ import java.util.Objects;
 
 import static no.ion.modulec.util.Exceptions.uncheckIO;
 
-public record CompilationResult(boolean success, int sourceFiles, Duration duration, List<Diagnostic> diagnostics,
-                                String out, Path destination, RuntimeException exception) {
+public record CompilationResult(ResultType resultType, int sourceFiles, Duration duration, String message, Path destination) {
     public CompilationResult {
+        Objects.requireNonNull(resultType, "resultType cannot be null");
         Objects.requireNonNull(duration, "duration cannot be null");
-        Objects.requireNonNull(diagnostics, "diagnostics cannot be null");
-        Objects.requireNonNull(out, "out cannot be null");
+        Objects.requireNonNull(message, "message cannot be null");
+        // In multi-module compilation, there is one destination directory per module and null is passed here.
+        //Objects.requireNonNull(destination, "destination cannot be null");
     }
 
     public static CompilationResult ofError(long startNanos, String message) {
         Duration duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new CompilationResult(false, -1, duration, List.of(), message, null, null);
+        return new CompilationResult(ResultType.ERROR, -1, duration, message, null);
     }
 
-    public boolean noop() { return success && sourceFiles == 0; }
+    public static CompilationResult of(boolean success, int sourceFiles, long startNanos, List<Diagnostic> diagnostics,
+                                       String out, Path destination, RuntimeException exception) {
+        return of(success, sourceFiles, startNanos, makeMessage(diagnostics, out, exception), destination);
+    }
 
-    /**
-     * Tries to make a message similar to that produced by the javac tool.
-     */
-    public String makeMessage() {
+    public static CompilationResult of(boolean success, int sourceFiles, long startNanos, String message, Path destination) {
+        ResultType resultType = success ? ResultType.OK : ResultType.ERROR;
+        Duration duration = Duration.ofNanos(System.nanoTime() - startNanos);
+        return new CompilationResult(resultType, sourceFiles, duration, message, destination);
+    }
+
+    public static CompilationResult ofNoop(int sourceFiles, long startNanos, Path destination) {
+        Duration duration = Duration.ofNanos(System.nanoTime() - startNanos);
+        return new CompilationResult(ResultType.NOOP, sourceFiles, duration, "", destination);
+    }
+
+    public boolean success() { return resultType().success(); }
+    public boolean noop() { return resultType == ResultType.NOOP; }
+
+    /** Tries to make a message similar to that produced by the javac tool. */
+    private static String makeMessage(List<Diagnostic> diagnostics, String out, RuntimeException exception) {
         if (exception != null) {
             return exception.getMessage();
         }

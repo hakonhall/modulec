@@ -1,9 +1,9 @@
 package no.ion.modulec;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public interface MessageSink {
 
@@ -28,15 +28,11 @@ public interface MessageSink {
     default void milestone(String format, Object... args) { milestone(format.formatted(args)); }
 
     /** A significant command is about to be invoked, e.g. ["javac", "-d", "classes", "src/Foo.java"]. */
-    default void command(String... command) { command(List.of(command)); }
-    default void command(String program, List<String> arguments) {
-        List<String> union = new ArrayList<>();
-        union.add(program);
-        union.addAll(arguments);
-        command(union);
-    }
-    default void command(List<String> command) {
-        log(Type.COMMAND, () -> command.stream().map(MessageSink::shellEscapeArgument).collect(Collectors.joining(" ", "", "\n")));
+    default void command(String... command) { command(Stream.of(command)); }
+    default void command(String program, List<String> arguments) { command(Stream.concat(Stream.of(program), arguments.stream())); }
+    default void command(List<String> command) { command(command.stream()); }
+    private void command(Stream<String> command) {
+        log(Type.COMMAND, () -> command.map(MessageSink::shellEscapeArgument).collect(Collectors.joining(" ", "", "\n")));
     }
 
     default void debug(Supplier<String> message) { log(Type.DEBUG, message); }
