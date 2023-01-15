@@ -19,7 +19,6 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -161,8 +160,7 @@ public class Compiler {
                 .collect(Collectors.toList());
 
         String out = writer.toString();
-        var duration = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new CompilationResult(success, sourcePaths.size(), duration, diagnostics, out, null, exception);
+        return  CompilationResult.of(success, sourcePaths.size(), startNanos, diagnostics, out, null, exception);
     }
 
     private static List<Path> sourceFiles(List<Path> sourceDirectories) {

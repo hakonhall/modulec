@@ -84,7 +84,7 @@ class CompilerTest {
         assertTrue(moduleInfoClassAttributes.isPresent());
         assertTrue(moduleInfoClassAttributes.get().isFile());
 
-        String resultString = result.makeMessage();
+        String resultString = result.message();
         assertEquals("", resultString, "Bad result: " + resultString);
     }
 
@@ -101,9 +101,8 @@ class CompilerTest {
                     .addSourceDirectories(List.of(workDir.resolve("moduleB/src").path()))
                     .setClassOutputDirectory(workDir.resolve("moduleB/target").path());
             CompilationResult result = compiler.compile(compilation);
-            assertTrue(result.success(), "Compilation failed: " + result.makeMessage());
-            assertEquals("", result.makeMessage(), "Bad message: " + result.makeMessage());
-            assertEquals(0, result.diagnostics().size());
+            assertTrue(result.success(), "Compilation failed: " + result.message());
+            assertEquals("", result.message(), "Bad message: " + result.message());
 
             assertTrue(workDir.resolve("moduleA/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false));
             assertTrue(workDir.resolve("moduleA/target/example/A/internal/Internal.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
@@ -133,9 +132,8 @@ class CompilerTest {
                         .addSourceDirectories(List.of(workDir.resolve("moduleA/src1").path(), workDir.resolve("moduleA/src2").path()))
                         .setClassOutputDirectory(workDir.resolve("moduleA/target").path());
                 CompilationResult resultA = compiler.compile(compilationA);
-                assertTrue(resultA.success(), "Compilation failed: " + resultA.makeMessage());
-                assertEquals("", resultA.makeMessage(), "Bad message: " + resultA.makeMessage());
-                assertEquals(0, resultA.diagnostics().size());
+                assertTrue(resultA.success(), "Compilation failed: " + resultA.message());
+                assertEquals("", resultA.message(), "Bad message: " + resultA.message());
 
                 assertTrue(workDir.resolve("moduleA/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false));
                 assertTrue(workDir.resolve("moduleA/target/example/A/internal/Internal.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
@@ -151,9 +149,8 @@ class CompilerTest {
                             .setClassOutputDirectory(workDir.resolve("moduleB/target").path());
                 CompilationResult resultB = compiler.compile(compilationB);
 
-                assertTrue(resultB.success(), "Compilation failed: " + resultB.makeMessage());
-                assertEquals("", resultB.makeMessage(), "Bad message: " + resultB.makeMessage());
-                assertEquals(0, resultB.diagnostics().size());
+                assertTrue(resultB.success(), "Compilation failed: " + resultB.message());
+                assertEquals("", resultB.message(), "Bad message: " + resultB.message());
 
                 assertTrue(workDir.resolve("moduleB/target").readAttributesIfExists(true).map(BasicAttributes::isDirectory).orElse(false), "moduleB/target does not exist");
                 assertTrue(workDir.resolve("moduleB/target/example/B/Main.class").readAttributesIfExists(true).map(BasicAttributes::isFile).orElse(false));
@@ -243,14 +240,14 @@ class CompilerTest {
         CompilationResult result = compiler.compile(compilation);
         // The "no source files" is not informative if no modules were specified
         //assertEquals("error: no source files", result.makeMessage());
-        assertTrue(result.makeMessage().startsWith("error: no modules"), result.makeMessage());
+        assertTrue(result.message().startsWith("error: no modules"), result.message());
 
         compilation.addModule()
                    .addSourceDirectories(List.of(src.path()))
                    .setClassOutputDirectory(classes.path());
         src.makeDirectories();
         result = compiler.compile(compilation);
-        assertTrue(result.makeMessage().startsWith("error: no source files found in /"), result.makeMessage());
+        assertTrue(result.message().startsWith("error: no source files found in /"), result.message());
 
         src.resolve("module-info.java")
            .writeUtf8("""
@@ -259,7 +256,7 @@ class CompilerTest {
                          }
                          """);
         result = compiler.compile(compilation);
-        String message = result.makeMessage();
+        String message = result.message();
         assertTrue(message.contains("""
                              src/module-info.java:2: error: package is empty or does not exist: a.example.api
                                exports a.example.api;

@@ -18,14 +18,14 @@ import java.util.Optional;
 
 public final class ModuleCompiler {
     private final Context context;
-    private final Javac compiler;
+    private final Compiler compiler;
     private final Jar jar;
 
     public ModuleCompiler(Context context) {
-        this(context, new Javac(context), new Jar(context));
+        this(context, new Compiler(context), new Jar(context));
     }
 
-    ModuleCompiler(Context context, Javac compiler, Jar jar) {
+    ModuleCompiler(Context context, Compiler compiler, Jar jar) {
         this.context = context;
         this.compiler = compiler;
         this.jar = jar;

@@ -60,7 +60,7 @@ public class ModuleCompiler2 {
         }
 
         if (!result.cResult().success()) {
-            System.out.println(result.cResult().makeMessage());
+            System.out.println(result.cResult().message());
             return 1;
         } else {
             boolean success = true;

@@ -48,7 +48,7 @@ import static no.ion.modulec.util.Exceptions.uncheckIO;
 class SingleModuleCompilation {
     private static final Pattern JHMS_JAR_REGEX = Pattern.compile("(^|/)no\\.ion\\.jhms-[0-9]+\\.[0-9]+\\.[0-9]+\\.jar$");
 
-    private final Javac javac;
+    private final Compiler compiler;
     private final Jar jar;
     private final ModuleCompiler.MakeParams params;
 
@@ -60,8 +60,8 @@ class SingleModuleCompilation {
     private CompilationResult testSourceCompilationResult;
     private PackagingResult testJarResult;
 
-    SingleModuleCompilation(Javac javac, Jar jar, ModuleCompiler.MakeParams params) {
-        this.javac = javac;
+    SingleModuleCompilation(Compiler compiler, Jar jar, ModuleCompiler.MakeParams params) {
+        this.compiler = compiler;
         this.jar = jar;
         this.params = params;
     }
@@ -99,18 +99,19 @@ class SingleModuleCompilation {
         return OutputDirectory.create(destination, OutputDirectory.Owner.COMPILER_SINGLE);
     }
 
-    private CompilationResult compile(Javac.CompileParams compileParams) {
+    private CompilationResult compile(Compiler.CompileParams compileParams) {
         if (compileParams == null) return null;  // propagate abortion of compilation
 
-        CompilationResult result = javac.compile(compileParams);
-        String message = result.makeMessage();
+        CompilationResult result = compiler.compileWithJavac(compileParams);
+        String message = result.message();
         if (!message.isEmpty())
             params.log().info(message);
         if (!result.success())
-            throw new ModuleCompilerException(result.makeMessage()).setMultiLine(true).setSilent(true);
+            throw new ModuleCompilerException(result.message()).setMultiLine(true).setSilent(true);
 
         if (result.noop()) {
-            params.log().milestone("compiled no source files in %s to %s in %.3fs [up to date]",
+            params.log().milestone("compiled %d source files in %s to %s in %.3fs [skipped: already up to date]",
+                                   result.sourceFiles(),
                                    compileParams.sourceDirectory(),
                                    result.destination(),
                                    result.duration().toNanos() / 1_000_000_000d);
@@ -125,15 +126,15 @@ class SingleModuleCompilation {
         return result;
     }
 
-    private Javac.CompileParams compileSourceParams() {
-        return new Javac.CompileParams().setDebug(params.debug())
-                                        .setSourceDirectory(params.sourceDirectory())
-                                        .addModulePathEntriesFrom(params.modulePath())
-                                        .setClassDirectory(output.outputClassDirectory())
-                                        .setCompilationChecksumFile(output.compilationChecksumFile())
-                                        .setRelease(params.release())
-                                        .setVersion(params.version())
-                                        .setWarnings(params.warnings());
+    private Compiler.CompileParams compileSourceParams() {
+        return new Compiler.CompileParams().setDebug(params.debug())
+                                           .setSourceDirectory(params.sourceDirectory())
+                                           .addModulePathEntriesFrom(params.modulePath())
+                                           .setClassDirectory(output.outputClassDirectory())
+                                           .setCompilationChecksumFile(output.compilationChecksumFile())
+                                           .setRelease(params.release())
+                                           .setVersion(params.version())
+                                           .setWarnings(params.warnings());
     }
 
     private String resolveModuleName() {
@@ -144,16 +145,16 @@ class SingleModuleCompilation {
         return moduleDescriptor.name();
     }
 
-    private Javac.CompileParams compileTestSourceParams(Pathname testSourceDirectory) {
-        Javac.CompileParams compileParams = new Javac.CompileParams().setDebug(params.debug())
-                                                                     .setSourceDirectory(testSourceDirectory)
-                                                                     .addModulePathEntriesFrom(new ModulePath().addFrom(params.modulePath()))
-                                                                     .patchModule(moduleName, jarResult.pathname())
-                                                                     .setRelease(params.release())
-                                                                     .setClassDirectory(output.outputTestClassDirectory())
-                                                                     .setCompilationChecksumFile(output.testCompilationChecksumFile())
-                                                                     .setVersion(params.version())
-                                                                     .setWarnings(params.warnings());
+    private Compiler.CompileParams compileTestSourceParams(Pathname testSourceDirectory) {
+        Compiler.CompileParams compileParams = new Compiler.CompileParams().setDebug(params.debug())
+                                                                           .setSourceDirectory(testSourceDirectory)
+                                                                           .addModulePathEntriesFrom(new ModulePath().addFrom(params.modulePath()))
+                                                                           .patchModule(moduleName, jarResult.pathname())
+                                                                           .setRelease(params.release())
+                                                                           .setClassDirectory(output.outputTestClassDirectory())
+                                                                           .setCompilationChecksumFile(output.testCompilationChecksumFile())
+                                                                           .setVersion(params.version())
+                                                                           .setWarnings(params.warnings());
         params.testModuleInfo().ifPresent(compileParams::setModuleInfo);
         return compileParams;
     }
