@@ -1,9 +1,11 @@
 package no.ion.modulec.modco;
 
 import no.ion.modulec.UserErrorException;
+import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.Pathname;
 
 import java.nio.file.FileSystem;
+import java.util.Optional;
 
 public class ProgramArgumentIterator {
     private final FileSystem fileSystem;
@@ -31,6 +33,21 @@ public class ProgramArgumentIterator {
 
     public Pathname getOptionValueAsPathname() {
         return Pathname.of(fileSystem.getPath(getOptionValueString()));
+    }
+
+    public Pathname getOptionValueAsExistingSource() {
+        Pathname path = getOptionValueAsPathname();
+        Optional<BasicAttributes> attributes = path.readAttributesIfExists(true);
+        if (attributes.isEmpty())
+            throw new UserErrorException("No such file or directory: " + path);
+        if (attributes.get().isDirectory())
+            return path;
+        if (attributes.get().isFile()) {
+            if (!path.toString().endsWith(".java"))
+                throw new UserErrorException("Not a Java source file: " + path);
+            return path;
+        }
+        throw new UserErrorException("Neither directory nor file: " + path);
     }
 
     public Pathname getOptionValueAsExistingDirectory() {

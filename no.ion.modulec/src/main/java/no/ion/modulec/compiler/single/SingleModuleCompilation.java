@@ -7,6 +7,7 @@ import no.ion.modulec.ModuleCompilerException;
 import no.ion.modulec.UserErrorException;
 import no.ion.modulec.compiler.CompilationResult;
 import no.ion.modulec.compiler.ModulePath;
+import no.ion.modulec.file.BasicAttributes;
 import no.ion.modulec.file.FileMode;
 import no.ion.modulec.file.OutputDirectory;
 import no.ion.modulec.file.Pathname;
@@ -38,6 +39,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -73,8 +75,8 @@ class SingleModuleCompilation {
         mainClass = params.mainClass().map(this::qualifyClass);
         output.setJarFilename(moduleName + "@" + params.version() + ".jar");
         jarResult = pack(jarPackaging());
-        if (params.testSourceDirectory().isPresent()) {
-            testSourceCompilationResult = compile(compileTestSourceParams(params.testSourceDirectory().get()));
+        if (!params.testSourceDirectories().isEmpty()) {
+            testSourceCompilationResult = compile(compileTestSourceParams(params.testSourceDirectories(), !sourceCompilationResult.noop()));
             testJarResult = pack(testJarPackaging());
             if (params.testing())
                 runTests();
@@ -83,12 +85,34 @@ class SingleModuleCompilation {
     }
 
     private OutputDirectory initialValidation() {
-        Pathname sourceDirectory = params.sourceDirectory();
-        if (sourceDirectory == null)
-            throw new UserErrorException("No source directory");
-        Pathname moduleInfo = sourceDirectory.resolve("module-info.java");
-        if (!moduleInfo.isFile())
-            throw new ModuleCompilerException("Missing module declaration in source directory: " + moduleInfo);
+        List<Pathname> sourceDirectories = params.sourceDirectories();
+        if (sourceDirectories.isEmpty())
+            throw new UserErrorException("No source directories");
+
+        Pathname moduleInfo = null;
+        for (Pathname source : sourceDirectories) {
+            Optional<BasicAttributes> attributes = source.readAttributesIfExists(true);
+            if (attributes.isEmpty())
+                throw new UserErrorException("No such source file or directory: " + source);
+            if (attributes.get().isDirectory()) {
+                Pathname moduleInfoProbe = source.resolve("module-info.java");
+                if (moduleInfoProbe.isFile()) {
+                    if (moduleInfo != null) {
+                        throw new UserErrorException("Two module-info.java found: " + moduleInfo + " and " + moduleInfoProbe);
+                    }
+                    moduleInfo = moduleInfoProbe;
+                }
+            } else if (source.filename().equals("module-info.java")) {
+                if (!attributes.get().isFile())
+                    throw new UserErrorException("No such file: " + source);
+                if (moduleInfo != null) {
+                    throw new UserErrorException("Two module-info.java found: " + moduleInfo + " and " + source);
+                }
+                moduleInfo = source;
+            }
+        }
+        if (moduleInfo == null)
+            throw new ModuleCompilerException("Missing module declaration in sources: " + sourceDirectories);
 
         if (params.version() == null)
             throw new UserErrorException("Missing module version");
@@ -112,13 +136,13 @@ class SingleModuleCompilation {
         if (result.noop()) {
             params.log().milestone("compiled %d source files in %s to %s in %.3fs [skipped: already up to date]",
                                    result.sourceFiles(),
-                                   compileParams.sourceDirectory(),
+                                   compileParams.sourceDirectories(),
                                    result.destination(),
                                    result.duration().toNanos() / 1_000_000_000d);
         } else {
             params.log().milestone("compiled %d source files in %s to %s in %.3fs",
                                    result.sourceFiles(),
-                                   compileParams.sourceDirectory(),
+                                   compileParams.sourceDirectories(),
                                    result.destination(),
                                    result.duration().toNanos() / 1_000_000_000d);
         }
@@ -128,10 +152,11 @@ class SingleModuleCompilation {
 
     private Compiler.CompileParams compileSourceParams() {
         return new Compiler.CompileParams().setDebug(params.debug())
-                                           .setSourceDirectory(params.sourceDirectory())
+                                           .addSourceDirectories(params.sourceDirectories())
                                            .addModulePathEntriesFrom(params.modulePath())
                                            .setClassDirectory(output.outputClassDirectory())
                                            .setCompilationChecksumFile(output.compilationChecksumFile())
+                                           .setEmptyDirectory(output.emptyDirectory())
                                            .setRelease(params.release())
                                            .setVersion(params.version())
                                            .setWarnings(params.warnings());
@@ -145,17 +170,18 @@ class SingleModuleCompilation {
         return moduleDescriptor.name();
     }
 
-    private Compiler.CompileParams compileTestSourceParams(Pathname testSourceDirectory) {
+    private Compiler.CompileParams compileTestSourceParams(List<Pathname> testSourceDirectories, boolean forceCompilation) {
         Compiler.CompileParams compileParams = new Compiler.CompileParams().setDebug(params.debug())
-                                                                           .setSourceDirectory(testSourceDirectory)
+                                                                           .addSourceDirectories(testSourceDirectories)
                                                                            .addModulePathEntriesFrom(new ModulePath().addFrom(params.modulePath()))
                                                                            .patchModule(moduleName, jarResult.pathname())
                                                                            .setRelease(params.release())
                                                                            .setClassDirectory(output.outputTestClassDirectory())
                                                                            .setCompilationChecksumFile(output.testCompilationChecksumFile())
+                                                                           .setEmptyDirectory(output.emptyDirectory())
                                                                            .setVersion(params.version())
-                                                                           .setWarnings(params.warnings());
-        params.testModuleInfo().ifPresent(compileParams::setModuleInfo);
+                                                                           .setWarnings(params.warnings())
+                                                                           .setForceCompilation(!forceCompilation);
         return compileParams;
     }
 

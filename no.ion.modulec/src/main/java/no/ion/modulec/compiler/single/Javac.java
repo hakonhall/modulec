@@ -58,6 +58,7 @@ class Javac {
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream(128);
         String[] args = arguments.toArray(String[]::new);
         int exitCode = javaCompiler.run(null, byteArrayOutputStream, byteArrayOutputStream, args);
-        return new Result(byteArrayOutputStream.toString(), exitCode == 0);
+        String message = byteArrayOutputStream.toString();
+        return new Result(message, exitCode == 0);
     }
 }

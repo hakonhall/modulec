@@ -54,9 +54,9 @@ class OptionsTest {
                                         "-l", "9",
                                         "-r", "src/main/resources",
                                         "-s", "src/main/java",
-                                        "-I", "src/main/java/module-info.java",
                                         "-R", "src/test/resources",
                                         "-t", "src/test/java",
+                                        "-t", "src/test/module-info.java",
                                         "-b",
                                         "-v", "1.2.3",
                                         "-w", "-serial");
@@ -68,10 +68,9 @@ class OptionsTest {
         assertEquals(List.of(new ProgramSpec("foobin", "no.ion.example.Main")), params.programs());
         assertEquals(Release.fromFeatureReleaseCounter(9), params.release());;
         assertEquals(List.of(context.pathname("src/main/resources")), params.resourceDirectories());
-        assertEquals(context.pathname("src/main/java"), params.sourceDirectory());
-        assertEquals(Optional.of(context.pathname("src/main/java/module-info.java")), params.testModuleInfo());
+        assertEquals(List.of(context.pathname("src/main/java")), params.sourceDirectories());
         assertEquals(List.of(context.pathname("src/test/resources")), params.testResourceDirectories());
-        assertEquals(Optional.of(context.pathname("src/test/java")), params.testSourceDirectory());
+        assertEquals(List.of(context.pathname("src/test/java"), context.pathname("src/test/module-info.java")), params.testSourceDirectories());
         assertTrue(context.showCommands());
         assertTrue(context.showDebug());
         assertEquals(ModuleDescriptor.Version.parse("1.2.3"), params.version());
@@ -98,10 +97,9 @@ class OptionsTest {
         assertEquals(List.of(), params.programs());
         assertEquals(Release.ofJre(), params.release());;
         assertEquals(List.of(context.pathname("src/main/resources")), params.resourceDirectories());
-        assertEquals(context.pathname("src/main/java"), params.sourceDirectory());
-        assertEquals(Optional.empty(), params.testModuleInfo());
+        assertEquals(List.of(context.pathname("src/main/java")), params.sourceDirectories());
         assertEquals(List.of(context.pathname("src/test/resources")), params.testResourceDirectories());
-        assertEquals(Optional.of(context.pathname("src/test/java")), params.testSourceDirectory());
+        assertEquals(List.of(context.pathname("src/test/java")), params.testSourceDirectories());
         assertFalse(context.showCommands());
         assertFalse(context.showDebug());
         assertEquals(ModuleDescriptor.Version.parse("1.2.3"), params.version());

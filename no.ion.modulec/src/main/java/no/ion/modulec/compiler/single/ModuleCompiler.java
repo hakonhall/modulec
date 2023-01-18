@@ -2,7 +2,6 @@ package no.ion.modulec.compiler.single;
 
 import no.ion.modulec.Context;
 import no.ion.modulec.MessageSink;
-import no.ion.modulec.UserErrorException;
 import no.ion.modulec.compiler.ModulePath;
 import no.ion.modulec.compiler.Release;
 import no.ion.modulec.file.Pathname;
@@ -42,11 +41,10 @@ public final class ModuleCompiler {
         private List<ProgramSpec> programs = new ArrayList<>();
         private Release release = Release.ofJre();
         private final List<Pathname> resourceDirectories = new ArrayList<>();
-        private Pathname sourceDirectory = null;
+        private List<Pathname> sourceDirectories = new ArrayList<>();
         private boolean testing = true;
-        private Optional<Pathname> testModuleInfo = Optional.empty();
         private final List<Pathname> testResourceDirectories = new ArrayList<>();
-        private Optional<Pathname> testSourceDirectory = Optional.empty();
+        private List<Pathname> testSourceDirectories = new ArrayList<>();
         private ModuleDescriptor.Version version = null;
         private Optional<String> warnings = Optional.of("all");  // empty => no warnings, "all" => -Xlint, otherwise foo => -Xlint:foo.
 
@@ -92,8 +90,8 @@ public final class ModuleCompiler {
             return this;
         }
 
-        public MakeParams setSourceDirectory(Pathname sourceDirectory) {
-            this.sourceDirectory = Objects.requireNonNull(sourceDirectory, "sourceDirectory cannot be null");
+        public MakeParams addSourceDirectories(List<Pathname> sourceDirectories) {
+            this.sourceDirectories.addAll(Objects.requireNonNull(sourceDirectories, "sourceDirectories cannot be null"));
             return this;
         }
 
@@ -102,22 +100,14 @@ public final class ModuleCompiler {
             return this;
         }
 
-        public MakeParams setTestModuleInfo(Pathname testModuleInfo) {
-            Objects.requireNonNull(testModuleInfo, "testModuleInfo cannot be null");
-            if (!testModuleInfo.filename().equals("module-info.java"))
-                throw new UserErrorException("Test module declaration must be named module-info.java: " + testModuleInfo);
-            this.testModuleInfo = Optional.of(testModuleInfo);
-            return this;
-        }
-
         public MakeParams addTestResourceDirectory(Pathname testResourceDirectory) {
             this.testResourceDirectories.add(Objects.requireNonNull(testResourceDirectory, "testResourceDirectory cannot be null"));
             return this;
         }
 
-        public MakeParams setTestSourceDirectory(Pathname testSourceDirectory) {
-            Objects.requireNonNull(testSourceDirectory, "testSourceDirectory cannot be null");
-            this.testSourceDirectory = Optional.of(testSourceDirectory);
+        public MakeParams addTestSourceDirectories(List<Pathname> testSourceDirectories) {
+            Objects.requireNonNull(testSourceDirectories, "testSourceDirectories cannot be null");
+            this.testSourceDirectories.addAll(testSourceDirectories);
             return this;
         }
 
@@ -144,11 +134,10 @@ public final class ModuleCompiler {
         public List<ProgramSpec> programs() { return List.copyOf(programs); }
         public Release release() { return release; }
         public List<Pathname> resourceDirectories() { return resourceDirectories; }
-        public Pathname sourceDirectory() { return sourceDirectory; }
+        public List<Pathname> sourceDirectories() { return sourceDirectories; }
         public boolean testing() { return testing; }
-        public Optional<Pathname> testModuleInfo() { return testModuleInfo; }
         public List<Pathname> testResourceDirectories() { return testResourceDirectories; }
-        public Optional<Pathname> testSourceDirectory() { return testSourceDirectory; }
+        public List<Pathname> testSourceDirectories() { return testSourceDirectories; }
         public ModuleDescriptor.Version version() { return version; }
         public Optional<String> warnings() { return warnings; }
     }
