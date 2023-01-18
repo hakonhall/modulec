@@ -8,6 +8,7 @@ public class OutputDirectory {
     private final Pathname out;
     private final Owner owner;
 
+    private Pathname emptyDirectory = null;
     private Pathname outputClassDirectory = null;
     private Pathname outputTestClassDirectory = null;
     private String jarFilename = null;
@@ -37,6 +38,14 @@ public class OutputDirectory {
     }
 
     private Pathname ownerPathname() { return out.resolve("owner"); }
+
+    public Pathname emptyDirectory() {
+        if (emptyDirectory == null) {
+            emptyDirectory = out.resolve("empty");
+            emptyDirectory.makeDirectory();
+        }
+        return emptyDirectory;
+    }
 
     /** Creates the output directory for the class files from the compilation of the source files, if not already done. */
     public Pathname outputClassDirectory() {
@@ -138,9 +147,9 @@ public class OutputDirectory {
         }
 
         Optional<String> magic = ownerPathname().readUtf8IfExists();
-        if (magic.isPresent() && magic.get().equals(owner.magic))
-            return this;
+        if (magic.isEmpty() || !magic.get().equals(owner.magic))
+            throw new UserErrorException("Refuse to use non-empty output directory: " + out);
 
-        throw new UserErrorException("Refuse to use non-empty output directory: " + out);
+        return this;
     }
 }

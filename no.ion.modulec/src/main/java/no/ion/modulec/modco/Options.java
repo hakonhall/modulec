@@ -32,10 +32,9 @@ public class Options {
         Release release = Release.ofJre();
         boolean showCommands = false;
         boolean showDebug = false;
-        Pathname sourceDirectory = null;
+        List<Pathname> sourceDirectories = new ArrayList<>();
         List<Pathname> resourceDirectories = new ArrayList<>();
-        Pathname testModuleInfo = null;
-        Pathname testSourceDirectory = null;
+        List<Pathname> testSourceDirectories = new ArrayList<>();
         List<Pathname> testResourceDirectories = new ArrayList<>();
         ModuleDescriptor.Version version = null;
         String warnings = "all";
@@ -98,15 +97,7 @@ public class Options {
                     continue;
                 case "-s":
                 case "--source":
-                    sourceDirectory = arguments.getOptionValueAsExistingDirectory();
-                    continue;
-                case "-I":
-                case "--test-module-info":
-                    testModuleInfo = arguments.getOptionValueAsPathname();
-                    if (!testModuleInfo.filename().equals("module-info.java"))
-                        throw new UserErrorException("--test-module-info must specify a module-info.java file");
-                    if (!testModuleInfo.isFile())
-                        throw new UserErrorException("No such file: " + testModuleInfo);
+                    sourceDirectories.add(arguments.getOptionValueAsExistingSource());
                     continue;
                 case "-R":
                 case "--test-resources":
@@ -114,7 +105,7 @@ public class Options {
                     continue;
                 case "-t":
                 case "--test-source":
-                    testSourceDirectory = arguments.getOptionValueAsExistingDirectory();
+                    testSourceDirectories.add(arguments.getOptionValueAsExistingSource());
                     continue;
                 case "-b":
                 case "--verbose":
@@ -188,21 +179,21 @@ public class Options {
         params.setWarnings(warnings.isEmpty() ? Optional.empty() : Optional.of(warnings));
 
         // Maven layout
-        if (sourceDirectory == null) {
+        if (sourceDirectories.isEmpty()) {
             Pathname srcMainJava = Pathname.of(context.fileSystem().getPath("src/main/java"));
             if (srcMainJava.isDirectory()) {
                 if (!srcMainJava.resolve("module-info.java").isFile())
                     throw new UserErrorException("Missing module declaration: src/main/java/module-info.java");
-                sourceDirectory = srcMainJava;
+                sourceDirectories.add(srcMainJava);
                 if (resourceDirectories.isEmpty()) {
                     Pathname srcMainResources = Pathname.of(context.fileSystem().getPath("src/main/resources"));
                     if (srcMainResources.isDirectory())
                         resourceDirectories.add(srcMainResources);
                 }
-                if (testSourceDirectory == null) {
+                if (testSourceDirectories.isEmpty()) {
                     Pathname srcTestJava = Pathname.of(context.fileSystem().getPath("src/test/java"));
                     if (srcTestJava.isDirectory())
-                        testSourceDirectory = srcTestJava;
+                        testSourceDirectories.add(srcTestJava);
                 }
                 if (testResourceDirectories.isEmpty()) {
                     Pathname srcTestResources = Pathname.of(context.fileSystem().getPath("src/test/resources"));
@@ -213,33 +204,33 @@ public class Options {
         }
 
         // Custom layout
-        if (sourceDirectory == null) {
+        if (sourceDirectories.isEmpty()) {
             Pathname src = Pathname.of(context.fileSystem().getPath("src"));
             if (src.isDirectory()) {
                 if (src.resolve("module-info.java").isFile()) {
-                    sourceDirectory = src;
+                    sourceDirectories.add(src);
                 } else {
                     throw new UserErrorException("Missing module declaration: src/module-info.java");
                 }
 
-                if (testSourceDirectory == null) {
+                if (testSourceDirectories.isEmpty()) {
                     Pathname test = Pathname.of(context.fileSystem().getPath("test"));
                     if (test.isDirectory())
-                        testSourceDirectory = test;
+                        testSourceDirectories.add(test);
                 }
             }
         }
 
-        if (sourceDirectory == null)
+        if (sourceDirectories.isEmpty())
             throw new UserErrorException("No source directory found: Missing '--source' option");
-        params.setSourceDirectory(sourceDirectory);
+        params.addSourceDirectories(sourceDirectories);
         resourceDirectories.forEach(params::addResourceDirectory);
 
-        if (testSourceDirectory == null) {
+        if (testSourceDirectories.isEmpty()) {
             if (!testResourceDirectories.isEmpty())
                 throw new UserErrorException("Test resource directory specified but not test source directory");
         } else {
-            params.setTestSourceDirectory(testSourceDirectory);
+            params.addTestSourceDirectories(testSourceDirectories);
             testResourceDirectories.forEach(params::addTestResourceDirectory);
         }
 
@@ -249,9 +240,6 @@ public class Options {
 
         if (modulePath != null)
             params.addToModulePath(modulePath);
-
-        if (testModuleInfo != null)
-            params.setTestModuleInfo(testModuleInfo);
 
         return new Options(params);
     }

@@ -52,12 +52,13 @@ class Compiler {
         private Optional<String> debug = Optional.of(""); // => -g
         private Pathname checksumFile = null;
         private Pathname classDirectory = null;
+        private Pathname emptyDirectory = null;
+        private boolean forceCompilation = false;
         private ModulePath modulePath = new ModulePath();
-        private Pathname moduleInfo = null;
         private final List<String> options = new ArrayList<>();
         private final List<CompileParams.Patch> patches = new ArrayList<>();
         private Release release = Release.ofJre();
-        private Pathname sourceDirectory = null;
+        private List<Pathname> sourceDirectories = null;
         private ModuleDescriptor.Version version = null;
         private Optional<String> warnings = Optional.of("all");
 
@@ -87,14 +88,19 @@ class Compiler {
             return this;
         }
 
-        CompileParams addModulePathEntriesFrom(ModulePath modulePath) {
-            Objects.requireNonNull(modulePath, "modulePath cannot be null");
-            this.modulePath.addFrom(modulePath);
+        CompileParams setEmptyDirectory(Pathname emptyDirectory) {
+            this.emptyDirectory = emptyDirectory;
             return this;
         }
 
-        CompileParams setModuleInfo(Pathname moduleInfoPathname) {
-            this.moduleInfo = moduleInfoPathname;
+        CompileParams setForceCompilation(boolean forceCompilation) {
+            this.forceCompilation = forceCompilation;
+            return this;
+        }
+
+        CompileParams addModulePathEntriesFrom(ModulePath modulePath) {
+            Objects.requireNonNull(modulePath, "modulePath cannot be null");
+            this.modulePath.addFrom(modulePath);
             return this;
         }
 
@@ -108,8 +114,10 @@ class Compiler {
             return this;
         }
 
-        CompileParams setSourceDirectory(Pathname sourceDirectory) {
-            this.sourceDirectory = Objects.requireNonNull(sourceDirectory, "sourceDirectory cannot be null");
+        CompileParams addSourceDirectories(List<Pathname> sourceDirectories) {
+            this.sourceDirectories = Objects.requireNonNull(sourceDirectories, "sourceDirectories cannot be null");
+            if (sourceDirectories.isEmpty())
+                throw new ModuleCompilerException("sourceDirectories cannot be empty");
             return this;
         }
 
@@ -124,10 +132,11 @@ class Compiler {
         }
 
         Optional<String> debug() { return debug; }
-        Pathname sourceDirectory() { return sourceDirectory; }
-        Optional<Pathname> moduleInfo() { return Optional.ofNullable(moduleInfo); }
+        List<Pathname> sourceDirectories() { return sourceDirectories; }
         ModulePath mutableModulePath() { return modulePath; }
         Pathname classDirectory() { return classDirectory; }
+        Pathname emptyDirectory() { return emptyDirectory; }
+        boolean forceCompilation() { return forceCompilation; }
         List<CompileParams.Patch> patchedModules() { return List.copyOf(patches); }
         Release release() { return release; }
         ModuleDescriptor.Version version() { return version; }
@@ -144,34 +153,38 @@ class Compiler {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             CompileParams that = (CompileParams) o;
-            return Objects.equals(debug, that.debug) && Objects.equals(classDirectory, that.classDirectory) && Objects.equals(modulePath, that.modulePath) && Objects.equals(moduleInfo, that.moduleInfo) && Objects.equals(options, that.options) && Objects.equals(patches, that.patches) && Objects.equals(release, that.release) && Objects.equals(sourceDirectory, that.sourceDirectory) && Objects.equals(version, that.version) && Objects.equals(warnings, that.warnings);
+            return forceCompilation == that.forceCompilation &&
+                   Objects.equals(debug, that.debug) &&
+                   Objects.equals(checksumFile, that.checksumFile) &&
+                   Objects.equals(classDirectory, that.classDirectory) &&
+                   Objects.equals(emptyDirectory, that.emptyDirectory) &&
+                   Objects.equals(modulePath, that.modulePath) &&
+                   Objects.equals(options, that.options) &&
+                   Objects.equals(patches, that.patches) &&
+                   Objects.equals(release, that.release) &&
+                   Objects.equals(sourceDirectories, that.sourceDirectories) &&
+                   Objects.equals(version, that.version) &&
+                   Objects.equals(warnings, that.warnings);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(debug, classDirectory, modulePath, moduleInfo, options, patches, release, sourceDirectory, version, warnings);
+            return Objects.hash(debug, checksumFile, classDirectory, emptyDirectory, forceCompilation, modulePath, options, patches, release, sourceDirectories, version, warnings);
         }
     }
 
     CompilationResult compile(CompileParams compilation) {
         long startNanos = System.nanoTime();
 
-        final List<Pathname> sources;
-        Optional<Pathname> moduleInfo = compilation.moduleInfo();
-        if (moduleInfo.isEmpty()) {
-            sources = List.of(compilation.sourceDirectory);
-        } else if (moduleInfo.get().isFile()) {
-            sources = List.of(moduleInfo.get(), compilation.sourceDirectory);
-        } else {
-            throw new UserErrorException("No such module declaration: " + moduleInfo.get());
-        }
-
         final List<Path> javaPaths;
         if (compilation.checksumFile == null) {
-            javaPaths = sources.stream().map(SourceDirectory::resolveSource).flatMap(List::stream).collect(Collectors.toList());
+            javaPaths = compilation.sourceDirectories.stream()
+                                                     .map(SourceDirectory::resolveSource)
+                                                     .flatMap(List::stream)
+                                                     .collect(Collectors.toList());
         } else {
             ClassDirectory classDirectory = prepareClassDirectory(compilation.classDirectory,
-                                                                  sources,
+                                                                  compilation.sourceDirectories,
                                                                   compilation.checksumFile,
                                                                   compilation.hashCode());
             if (classDirectory.upToDate())
@@ -283,96 +296,95 @@ class Compiler {
     CompilationResult compileWithJavac(CompileParams compilation) {
         long startNanos = System.nanoTime();
 
-        final List<Pathname> sources;
-        Optional<Pathname> moduleInfo = compilation.moduleInfo();
-        if (moduleInfo.isEmpty()) {
-            sources = List.of(compilation.sourceDirectory);
-        } else if (moduleInfo.get().isFile()) {
-            sources = List.of(moduleInfo.get(), compilation.sourceDirectory);
-        } else {
-            throw new UserErrorException("No such module declaration: " + moduleInfo.get());
-        }
-
-        final List<Path> javaPaths;
+        final List<String> javaPaths;
         if (compilation.checksumFile == null) {
-            javaPaths = sources.stream().map(SourceDirectory::resolveSource).flatMap(List::stream).collect(Collectors.toList());
+            javaPaths = compilation.sourceDirectories()
+                                   .stream()
+                                   .map(SourceDirectory::resolveSource)
+                                   .flatMap(List::stream)
+                                   .map(Path::toString)
+                                   .collect(Collectors.toList());
         } else {
             ClassDirectory classDirectory = prepareClassDirectory(compilation.classDirectory,
-                                                                  sources,
+                                                                  compilation.sourceDirectories,
                                                                   compilation.checksumFile,
                                                                   compilation.hashCode());
-            if (classDirectory.upToDate())
+
+            // TODO: Make NOOP check basically a checksum of javac arguments, except for timestamp comparison
+            //  source/classes as above, and -p JARs timestamp below.  Thus we need a timestamp for when last
+            //  compilation was done too.  Can be read from the checksum file last modified timestamp?
+            //  The reason a compilation is needed with more recent JAR timestamp, is that constants from those
+            //  can have changed and are embedded in the compiled class files, which therefore needs to be
+            //  recompiled.  Note that a more recent source JAR is special and can be ignored since the
+            //  source/classes check is more correct.
+            boolean modulePathHasChanged = true;
+            if (!compilation.forceCompilation && classDirectory.upToDate() && !modulePathHasChanged)
                 return CompilationResult.ofNoop(classDirectory.paths.size(), startNanos, compilation.classDirectory.path());
-            javaPaths = classDirectory.paths();
+            javaPaths = classDirectory.paths().stream().map(Path::toString).collect(Collectors.toList());
         }
 
-        var collector = new DiagnosticCollector<JavaFileObject>();
-        List<String> javacEquivalentArguments = new ArrayList<>();
+        List<String> javacArgs = new ArrayList<>();
 
-        StandardJavaFileManager standardFileManager = javaCompiler.getStandardFileManager(collector, compilation.locale(), compilation.charset());
-        final Javac.Result result;
-        try {
-            compilation.classDirectory().makeDirectories();
-            uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(compilation.classDirectory().path())));
-            javacEquivalentArguments.add("-d");
-            javacEquivalentArguments.add(compilation.classDirectory().path().toString());
+        compilation.classDirectory().makeDirectories();
+        javacArgs.add("-d");
+        javacArgs.add(compilation.classDirectory().path().toString());
 
-            ModulePath modulePath = compilation.mutableModulePath();
-            if (!modulePath.isEmpty()) {
-                uncheckIO(() -> standardFileManager.setLocationFromPaths(StandardLocation.MODULE_PATH, modulePath.toPaths()));
-                javacEquivalentArguments.add("-p");
-                javacEquivalentArguments.add(modulePath.toColonSeparatedString());
-            }
-
-            var options = new ArrayList<String>(compilation.options());
-
-            compilation.warnings().ifPresent(warnings -> {
-                if (warnings.equals("all")) {
-                    options.add("-Xlint");
-                } else {
-                    options.add("-Xlint:" + warnings);
-                }
-            });
-
-            compilation.debug().ifPresent(debug -> {
-                if (debug.equals("")) {
-                    options.add("-g");
-                } else {
-                    options.add("-g:" + debug);
-                }
-            });
-
-            if (!compilation.release().matchesJreVersion()) {
-                options.add("--release");
-                options.add(Integer.toString(compilation.release().releaseInt()));
-            }
-
-            ModuleDescriptor.Version version = compilation.version();
-            if (version == null)
-                throw new ModuleCompilerException("Missing module version");
-            options.add("--module-version");
-            options.add(version.toString());
-
-            // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
-            //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
-            compilation.patchedModules()
-                       .forEach(patch -> {
-                           options.add("--patch-module");
-                           options.add(patch.moduleName() + "=" + patch.modularJarPathname());
-                       });
-
-            // TODO: Enable dependency generation. Append file=foo?
-            // options.add("--debug=completionDeps=source,class");
-
-            javacEquivalentArguments.addAll(options);
-
-            Iterable<? extends JavaFileObject> compilationUnits = standardFileManager.getJavaFileObjectsFromPaths(javaPaths);
-            compilationUnits.forEach(unit -> javacEquivalentArguments.add(unit.getName()));
-
-            result = new Javac(context, javaCompiler).javac(javacEquivalentArguments);
-        } finally {
-            uncheckIO(standardFileManager::close);
+        ModulePath modulePath = compilation.mutableModulePath();
+        if (!modulePath.isEmpty()) {
+            javacArgs.add("-p");
+            // TODO: If the timestamp of any of the resolved JARs or even exploded JARs is more recent than the last
+            //  compilation, then we need to do a full compilation and avoid NOOP.
+            javacArgs.add(modulePath.toColonSeparatedString());
         }
+
+        javacArgs.addAll(compilation.options());
+
+        // Avoid annotation processing.  This is done in compile() by passing null for the classes to do annotation
+        // processing on.  The equivalent is... -proc:none ?
+        javacArgs.add("-proc:none");
+        // That's not enough.  For some reason the processor classloader is needed even with -proc:none.  Trying to
+        // point --processor-path to an empty directory.  This seems to work.
+        if (compilation.emptyDirectory() == null)
+            throw new UserErrorException("No empty directory path has been specified");
+        javacArgs.add("--processor-path");
+        javacArgs.add(compilation.emptyDirectory().toString());
+
+        compilation.warnings().ifPresent(warnings -> {
+            if (warnings.equals("all")) {
+                javacArgs.add("-Xlint");
+            } else {
+                javacArgs.add("-Xlint:" + warnings);
+            }
+        });
+
+        compilation.debug().ifPresent(debug -> {
+            if (debug.equals("")) {
+                javacArgs.add("-g");
+            } else {
+                javacArgs.add("-g:" + debug);
+            }
+        });
+
+        if (!compilation.release().matchesJreVersion()) {
+            javacArgs.add("--release");
+            javacArgs.add(Integer.toString(compilation.release().releaseInt()));
+        }
+
+        ModuleDescriptor.Version version = compilation.version();
+        if (version == null)
+            throw new ModuleCompilerException("Missing module version");
+        javacArgs.add("--module-version");
+        javacArgs.add(version.toString());
+
+        compilation.patchedModules()
+                   .forEach(patch -> {
+                       javacArgs.add("--patch-module");
+                       javacArgs.add(patch.moduleName() + "=" + patch.modularJarPathname());
+                   });
+
+        javacArgs.addAll(javaPaths);
+
+        Javac.Result result = new Javac(context, javaCompiler).javac(javacArgs);
 
         if (compilation.checksumFile != null && result.success())
             updateChecksumFile(compilation.checksumFile, compilation.hashCode());
