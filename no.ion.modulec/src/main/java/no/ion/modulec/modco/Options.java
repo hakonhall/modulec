@@ -172,9 +172,8 @@ public class Options {
         }
         programs.forEach(params::addProgram);
 
-        if (version == null)
-            throw new UserErrorException("Missing required option '--version'");
-        params.setVersion(version);
+        if (version != null)
+            params.setVersion(version);
 
         params.setWarnings(warnings.isEmpty() ? Optional.empty() : Optional.of(warnings));
 

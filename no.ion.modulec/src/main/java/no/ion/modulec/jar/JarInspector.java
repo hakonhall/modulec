@@ -36,8 +36,8 @@ public class JarInspector {
             } else if (pathname.isDirectory()) {
                 if (pathname.resolve("module-info.class").isFile()) {
                     try (UncheckedInputStream inputStream = pathname.newInputStream()) {
-                        hybridModularModuleInfo(inputStream)
-                                .ifPresent(id -> map.put(id, new HybridModularJarInfo(id, pathname)));
+                        ModuleVersion moduleVersion = hybridModularModuleInfo(inputStream);
+                        map.put(moduleVersion, new HybridModularJarInfo(moduleVersion, pathname));
                     }
                 } else {
                     pathname.forEachDirectoryEntry(directoryEntry -> {
@@ -53,16 +53,15 @@ public class JarInspector {
     }
 
     public static Optional<HybridModularJarInfo> hybridModularJarInfoOf(Pathname jarPathname) {
-        Optional<ModuleDescriptor> descriptor = moduleDescriptorOf(jarPathname);
-        if (descriptor.isEmpty() || descriptor.get().version().isEmpty()) return Optional.empty();
-        return Optional.of(new HybridModularJarInfo(new ModuleVersion(descriptor.get().name(),
-                                                                      descriptor.get().version().get()),
-                                                    jarPathname));
+        return moduleDescriptorOf(jarPathname)
+                .map(descriptor -> new HybridModularJarInfo(new ModuleVersion(descriptor.name(),
+                                                                              descriptor.version()),
+                                                            jarPathname));
     }
 
-    public static Optional<ModuleVersion> hybridModularModuleInfo(InputStream inputStream) {
+    public static ModuleVersion hybridModularModuleInfo(InputStream inputStream) {
         ModuleDescriptor descriptor = uncheckIO(() -> ModuleDescriptor.read(inputStream));
-        return descriptor.version().map(version -> new ModuleVersion(descriptor.name(), version));
+        return new ModuleVersion(descriptor.name(), descriptor.version());
     }
 
     public static Optional<ModuleDescriptor> moduleDescriptorOf(Pathname jarPathname) {

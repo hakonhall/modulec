@@ -45,7 +45,7 @@ public final class ModuleCompiler {
         private boolean testing = true;
         private final List<Pathname> testResourceDirectories = new ArrayList<>();
         private List<Pathname> testSourceDirectories = new ArrayList<>();
-        private ModuleDescriptor.Version version = null;
+        private Optional<ModuleDescriptor.Version> version = Optional.empty();
         private Optional<String> warnings = Optional.of("all");  // empty => no warnings, "all" => -Xlint, otherwise foo => -Xlint:foo.
 
         public MakeParams(Context context) {
@@ -112,7 +112,7 @@ public final class ModuleCompiler {
         }
 
         public MakeParams setVersion(ModuleDescriptor.Version version) {
-            this.version = Objects.requireNonNull(version, "version cannot be null");
+            this.version = Optional.of(Objects.requireNonNull(version, "version cannot be null"));
             return this;
         }
 
@@ -138,7 +138,7 @@ public final class ModuleCompiler {
         public boolean testing() { return testing; }
         public List<Pathname> testResourceDirectories() { return testResourceDirectories; }
         public List<Pathname> testSourceDirectories() { return testSourceDirectories; }
-        public ModuleDescriptor.Version version() { return version; }
+        public Optional<ModuleDescriptor.Version> version() { return version; }
         public Optional<String> warnings() { return warnings; }
     }
 

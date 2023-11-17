@@ -59,16 +59,16 @@ public class FileStatus {
     public Optional<String> user() {
         UserPrincipal user = get("owner", UserPrincipal.class);
         return user.getName().equals(Integer.toString(uid())) ?
-                Optional.of(user.getName()) :
-                Optional.empty();
+               Optional.empty() :
+               Optional.of(user.getName());
     }
 
     /** Returns the group name of the gid that owns the file, if there is one associated with the gid. */
     public Optional<String> group() {
         GroupPrincipal group = get("group", GroupPrincipal.class);
         return group.getName().equals(Integer.toString(uid())) ?
-                Optional.of(group.getName()) :
-                Optional.empty();
+               Optional.empty() :
+               Optional.of(group.getName());
     }
 
     private int getInt(String name) { return get(name, Integer.class); }

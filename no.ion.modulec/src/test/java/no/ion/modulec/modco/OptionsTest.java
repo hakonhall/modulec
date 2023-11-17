@@ -35,12 +35,8 @@ class OptionsTest {
 
     @Test
     void testEmptyParams() {
-        try {
-            Options.parse(context);
-            fail();
-        } catch (UserErrorException e) {
-            assertEquals("Missing required option '--version'", e.getMessage());
-        }
+        Options options = Options.parse(context);
+        assertEquals(Optional.empty(), options.params().version());
     }
 
     @Test
@@ -73,7 +69,7 @@ class OptionsTest {
         assertEquals(List.of(context.pathname("src/test/java"), context.pathname("src/test/module-info.java")), params.testSourceDirectories());
         assertTrue(context.showCommands());
         assertTrue(context.showDebug());
-        assertEquals(ModuleDescriptor.Version.parse("1.2.3"), params.version());
+        assertEquals(Optional.of(ModuleDescriptor.Version.parse("1.2.3")), params.version());
         assertEquals(Optional.of("-serial"), params.warnings());
     }
 
@@ -102,7 +98,7 @@ class OptionsTest {
         assertEquals(List.of(context.pathname("src/test/java")), params.testSourceDirectories());
         assertFalse(context.showCommands());
         assertFalse(context.showDebug());
-        assertEquals(ModuleDescriptor.Version.parse("1.2.3"), params.version());
+        assertEquals(Optional.of(ModuleDescriptor.Version.parse("1.2.3")), params.version());
         assertEquals(Optional.of("all"), params.warnings());
     }
 }
