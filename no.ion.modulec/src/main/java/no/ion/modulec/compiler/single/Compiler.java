@@ -59,7 +59,7 @@ class Compiler {
         private final List<CompileParams.Patch> patches = new ArrayList<>();
         private Release release = Release.ofJre();
         private List<Pathname> sourceDirectories = null;
-        private ModuleDescriptor.Version version = null;
+        private Optional<ModuleDescriptor.Version> version = Optional.empty();
         private Optional<String> warnings = Optional.of("all");
 
         record Patch(String moduleName, Pathname modularJarPathname) {}
@@ -121,8 +121,13 @@ class Compiler {
             return this;
         }
 
-        CompileParams setVersion(ModuleDescriptor.Version version) {
+        CompileParams setVersion(Optional<ModuleDescriptor.Version> version) {
             this.version = Objects.requireNonNull(version, "version cannot be null");
+            return this;
+        }
+
+        CompileParams setVersion(ModuleDescriptor.Version version) {
+            this.version = Optional.of(Objects.requireNonNull(version, "version cannot be null"));
             return this;
         }
 
@@ -139,7 +144,7 @@ class Compiler {
         boolean forceCompilation() { return forceCompilation; }
         List<CompileParams.Patch> patchedModules() { return List.copyOf(patches); }
         Release release() { return release; }
-        ModuleDescriptor.Version version() { return version; }
+        Optional<ModuleDescriptor.Version> version() { return version; }
         Optional<String> warnings() { return warnings; }
 
         // TODO: A. Wire these to modco, B. wire all modco options to here, C. validate these in SingleModuleCompilation,
@@ -235,11 +240,10 @@ class Compiler {
                 options.add(Integer.toString(compilation.release().releaseInt()));
             }
 
-            ModuleDescriptor.Version version = compilation.version();
-            if (version == null)
-                throw new ModuleCompilerException("Missing module version");
-            options.add("--module-version");
-            options.add(version.toString());
+            compilation.version().ifPresent(version -> {
+                options.add("--module-version");
+                options.add(version.toString());
+            });
 
             // TODO: --patch-module module=path1:path2:... must be passed via options, as this is not yet supported:
             //uncheckIO(() -> standardFileManager.setLocationForModule(StandardLocation.PATCH_MODULE_PATH, module, List.of()));
@@ -370,11 +374,10 @@ class Compiler {
             javacArgs.add(Integer.toString(compilation.release().releaseInt()));
         }
 
-        ModuleDescriptor.Version version = compilation.version();
-        if (version == null)
-            throw new ModuleCompilerException("Missing module version");
-        javacArgs.add("--module-version");
-        javacArgs.add(version.toString());
+        compilation.version().ifPresent(version -> {
+            javacArgs.add("--module-version");
+            javacArgs.add(version.toString());
+        });
 
         compilation.patchedModules()
                    .forEach(patch -> {

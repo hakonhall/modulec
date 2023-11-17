@@ -73,7 +73,7 @@ class SingleModuleCompilation {
         sourceCompilationResult = compile(compileSourceParams());
         moduleName = resolveModuleName();
         mainClass = params.mainClass().map(this::qualifyClass);
-        output.setJarFilename(moduleName + "@" + params.version() + ".jar");
+        output.setJarFilename(moduleName + params.version().map(version -> "@" + version).orElse("") + ".jar");
         jarResult = pack(jarPackaging());
         if (!params.testSourceDirectories().isEmpty()) {
             testSourceCompilationResult = compile(compileTestSourceParams(params.testSourceDirectories(), !sourceCompilationResult.noop()));
@@ -113,9 +113,6 @@ class SingleModuleCompilation {
         }
         if (moduleInfo == null)
             throw new ModuleCompilerException("Missing module declaration in sources: " + sourceDirectories);
-
-        if (params.version() == null)
-            throw new UserErrorException("Missing module version");
 
         Pathname destination = params.out();
         if (destination == null)
@@ -225,14 +222,15 @@ class SingleModuleCompilation {
                     .ResolveParams(testBooterModule)
                     .requireVersion("5.9.1"));
 
-            ClassLoader moduleLoader = container.resolve(new HybridModuleContainer.ResolveParams(moduleName)
-                                                                                  .requireVersion(params.version()))
-                                                .getClassLoader();
+            HybridModuleContainer.ResolveParams resolveParams = new HybridModuleContainer.ResolveParams(moduleName);
+            params.version().ifPresent(resolveParams::requireVersion);
+
+            ClassLoader moduleLoader = container.resolve(resolveParams).getClassLoader();
             ClassLoader savedContext = Thread.currentThread().getContextClassLoader();
             Thread.currentThread().setContextClassLoader(moduleLoader);
             int exitCode;
             try {
-                params.log().command("javahms", "-p", modulePathString, "-c", moduleName, "-m", testBooterModule, testJarResult.pathname().toString());
+                this.params.log().command("javahms", "-p", modulePathString, "-c", moduleName, "-m", testBooterModule, testJarResult.pathname().toString());
                 exitCode = testBooter.intCall("runTests", Argument.of(Path.class, testJarResult.pathname().path()));
             } finally {
                 Thread.currentThread().setContextClassLoader(savedContext);
@@ -311,7 +309,7 @@ class SingleModuleCompilation {
                     if (compiledVersion.isEmpty())
                         throw new ModuleCompilerException("Module " + moduleVersion + " requires " + descriptor.get().name() +
                                                           " at an unspecified version");
-                    ModuleVersion dependency = new ModuleVersion(requires.name(), compiledVersion.get());
+                    ModuleVersion dependency = new ModuleVersion(requires.name(), compiledVersion);
                     if (!transitiveJars.containsKey(dependency))
                         unresolved.add(dependency);
                 }
