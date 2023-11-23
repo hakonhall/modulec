@@ -35,6 +35,7 @@ public class Options {
         List<Pathname> sourceDirectories = new ArrayList<>();
         List<Pathname> resourceDirectories = new ArrayList<>();
         List<Pathname> testSourceDirectories = new ArrayList<>();
+        boolean lookForTestSource = true;
         List<Pathname> testResourceDirectories = new ArrayList<>();
         ModuleDescriptor.Version version = null;
         String warnings = "all";
@@ -61,6 +62,11 @@ public class Options {
                 case "--module-path":
                     modulePath = new ModulePath().addFromColonSeparatedString(context.fileSystem(), arguments.getOptionValueString());
                     continue;
+                case "-N":
+                case "--no-test-source":
+                    lookForTestSource = false;
+                    continue;
+                case "-T":
                 case "--no-testing":
                     testing = false;
                     continue;
@@ -142,7 +148,11 @@ public class Options {
             params.setDebug(debug);
 
         params.setRelease(release);
-        params.setTesting(testing);
+
+        // Verification and normalization of -T/--no-testing, -t/--test-source, and -N/--no-test-source
+        if (!lookForTestSource) testing = false;
+        if (!lookForTestSource && !testResourceDirectories.isEmpty())
+            throw new UserErrorException("-t/--test-source conflicts with -T/--no-test-source");
 
         if (mainClass != null) {
             if (mainClass.startsWith(".")) {
@@ -189,7 +199,7 @@ public class Options {
                     if (srcMainResources.isDirectory())
                         resourceDirectories.add(srcMainResources);
                 }
-                if (testSourceDirectories.isEmpty()) {
+                if (testSourceDirectories.isEmpty() && lookForTestSource) {
                     Pathname srcTestJava = Pathname.of(context.fileSystem().getPath("src/test/java"));
                     if (srcTestJava.isDirectory())
                         testSourceDirectories.add(srcTestJava);
@@ -212,7 +222,7 @@ public class Options {
                     throw new UserErrorException("Missing module declaration: src/module-info.java");
                 }
 
-                if (testSourceDirectories.isEmpty()) {
+                if (testSourceDirectories.isEmpty() && lookForTestSource) {
                     Pathname test = Pathname.of(context.fileSystem().getPath("test"));
                     if (test.isDirectory())
                         testSourceDirectories.add(test);
@@ -226,9 +236,10 @@ public class Options {
         resourceDirectories.forEach(params::addResourceDirectory);
 
         if (testSourceDirectories.isEmpty()) {
-            if (!testResourceDirectories.isEmpty())
+            if (lookForTestSource && !testResourceDirectories.isEmpty())
                 throw new UserErrorException("Test resource directory specified but not test source directory");
         } else {
+            params.setTesting(testing);
             params.addTestSourceDirectories(testSourceDirectories);
             testResourceDirectories.forEach(params::addTestResourceDirectory);
         }

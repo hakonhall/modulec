@@ -1,5 +1,6 @@
 *.iml
 .idea/
 /no.ion.modulec/src/test/resources/basic/target/
-target/
-out/
+/no.ion.modulec/target/
+/no.ion.modulec.junit/target/
+/out/

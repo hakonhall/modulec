@@ -42,12 +42,14 @@ public class Reporter {
         }
 
         Throwable cause = throwable.getCause();
-        if (cause != null)
+        if (cause != null) {
+            string.append("Caused by: ");
             appendStackTrace(string, cause);
+        }
     }
 
     private static void appendStackTraceLow(StringBuilder string, Throwable throwable) {
-        string.append(throwable.getMessage()).append('\n');
+        string.append(throwable.toString()).append('\n');
         StackTraceElement[] stackTrace = throwable.getStackTrace();
         int maxIndex = maxIndex(stackTrace);
         for (int i = 0; i < maxIndex; ++i) {
