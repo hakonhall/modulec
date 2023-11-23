@@ -2,6 +2,7 @@ package no.ion.modulec.junit;
 
 import no.ion.modulec.junit.internal.ExecutionListener;
 import no.ion.modulec.junit.internal.Reporter;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.engine.JupiterTestEngine;
 import org.junit.platform.launcher.Launcher;
 import org.junit.platform.launcher.LauncherSession;
@@ -24,7 +25,7 @@ public class Main {
 
     public static void main(String[] args) {
         if (args.length < 1)
-            fail("Missing TESTJAR argument: Either test JAR or exploded test JAR directory");
+            fail("missing TESTJAR argument: Either test JAR or exploded test JAR directory");
         var testPath = Path.of(args[0]);
 
         System.exit(runTests(testPath));
@@ -44,7 +45,7 @@ public class Main {
         } else if (Files.isRegularFile(testDir) && testDir.getFileName().toString().endsWith(".jar")) {
             // OK: JAR
         } else {
-            reporter.info("No such JAR file or exploded JAR directory: " + testDir);
+            reporter.infoln("error: no such JAR file or exploded JAR directory: " + testDir);
             return 1;
         }
 
@@ -76,10 +77,20 @@ public class Main {
             // This JHMS application must be launched with the --context-class-loader option corresponding to the
             // module being tested.  We can therefore just pass that through to JUnit 5, which uses the context
             // class loader to locate and load test classes.
+            //
+            // E.g. the org.junit.jupiter.api.Test annotations on methods in the hybrid module being tested (whose class
+            // loader is specified by --context-class-loader), will be compared to Test annotation resolved by this
+            // no.ion.modulec.junit hybrid module.
+            //  - This module (no.ion.module.junit) resolves e.g. Test from the transitive hybrid module dependency
+            //    org.junit.jupiter.api@5.9.1.
+            //  - Therefore, the hybrid module being tested (--context-class-loader) must also depend on
+            //    org.junit.jupiter.api@5.9.1.
+            // This is not obvious, so sanity-check this here.
+            if (!sanityCheckDependencies()) return 1;
 
             TestPlan plan = launcher.discover(request);
             if (!plan.containsTests()) {
-                reporter.info("No tests found");
+                reporter.infoln("No tests found");
                 return 0;
             }
 
@@ -91,8 +102,27 @@ public class Main {
         return executionListener.wasSuccess() ? 0 : 1;
     }
 
+    private boolean sanityCheckDependencies() {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        String qualifiedTestClassName = Test.class.getName();
+        final Class<?> testClass;
+        try {
+            testClass = classLoader.loadClass(qualifiedTestClassName);
+        } catch (ClassNotFoundException e) {
+            reporter.infoln("error: the Hybrid Module " + classLoader.getName() + " must depend on " + Test.class.getClassLoader().getName());
+            return false;
+        }
+        if (testClass != Test.class) {
+            // A Hybrid Module's toString() returns the ID of the hybrid module, i.e. of the form NAME@VERSION.
+            reporter.infoln("error: the Hybrid Module " + classLoader.getName() + " was found to depend on " +
+                            testClass.getClassLoader().getName() + " but must depend on " + Test.class.getClassLoader().getName());
+            return false;
+        }
+        return true;
+    }
+
     private static void fail(String message) {
-        System.err.println(message);
+        System.err.println("error: " + message);
         System.exit(1);
     }
 }

@@ -15,9 +15,8 @@ Options:
                            with '.', it is prefixed with the module name.
   -p,--module-path MPATH   Sets the module path [mod].
   -o,--output OUT          Output directory [out].
-  -S,--no-source           Disable source compilation and packaging.
-     --no-testing          Skip running of tests.
-  -T,--no-test-source      Disable test compilation, packaging, and running.
+  -T,--no-testing          Disable test running.
+  -N,--no-test-source      Disable test compilation, packaging, and running.
   -P,--program N=CLASS     Create a program named N with main class CLASS.
   -l,--release RELEASE     Compile for the given Java release.
   -r,--resource R...       Include directory in JAR [src/main/resources].

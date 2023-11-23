@@ -20,6 +20,7 @@ import no.ion.modulec.jar.ModulePackaging;
 import no.ion.modulec.jar.PackagingResult;
 import no.ion.modulec.modco.ProgramSpec;
 import no.ion.modulec.module.ModuleVersion;
+import no.ion.modulec.util.Formatter;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,6 +37,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -69,6 +71,7 @@ class SingleModuleCompilation {
     }
 
     void make() {
+        long start = System.nanoTime();
         output = initialValidation();
         sourceCompilationResult = compile(compileSourceParams());
         moduleName = resolveModuleName();
@@ -82,6 +85,7 @@ class SingleModuleCompilation {
                 runTests();
         }
         makePrograms();
+        params.log().milestone("completed in " + Formatter.toString(Duration.ofNanos(System.nanoTime() - start)));
     }
 
     private OutputDirectory initialValidation() {
