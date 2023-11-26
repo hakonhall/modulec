@@ -24,7 +24,7 @@ public class Options {
 
     public static Options parse(ProgramContext context, String... args) {
         String debug = "";  // Equivalent to javac's -g
-        Pathname out = Pathname.of(context.fileSystem().getPath("out"));
+        Pathname out = context.pathname("out");
         String mainClass = null;
         ModulePath modulePath = null;
         boolean testing = true;
@@ -201,8 +201,13 @@ public class Options {
                 }
                 if (testSourceDirectories.isEmpty() && lookForTestSource) {
                     Pathname srcTestJava = Pathname.of(context.fileSystem().getPath("src/test/java"));
-                    if (srcTestJava.isDirectory())
+                    if (srcTestJava.isDirectory()) {
                         testSourceDirectories.add(srcTestJava);
+                        Pathname srcTestModuleInfo = srcTestJava.parent().resolve("module-info.java");
+                        if (srcTestModuleInfo.exists()) {
+                            testSourceDirectories.add(srcTestModuleInfo);
+                        }
+                    }
                 }
                 if (testResourceDirectories.isEmpty()) {
                     Pathname srcTestResources = Pathname.of(context.fileSystem().getPath("src/test/resources"));
