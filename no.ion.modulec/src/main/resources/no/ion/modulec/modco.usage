@@ -19,10 +19,10 @@ Options:
   -N,--no-test-source      Disable test compilation, packaging, and running.
   -P,--program N=CLASS     Create a program named N with main class CLASS.
   -l,--release RELEASE     Compile for the given Java release.
-  -r,--resource R...       Include directory in JAR [src/main/resources].
-  -s,--source S...         Source directories [src/main/java].
-  -R,--test-resource TR... Include directory in test JAR [src/test/resources].
-  -t,--test-source TS...   Test source directories [src/test/java].
+  -r,--resource R...       Include path in JAR [src/main/resources].
+  -s,--source S...         Source paths [src/main/java].
+  -R,--test-resource TR... Include path in test JAR [src/test/resources].
+  -t,--test-source TS...   Test source paths [src/test/{,module-info.}java].
   -b,--verbose             Print command-line equivalents and more.
   -v,--version VERSION     The module version.
   -w,--warnings LINT       Same as -Xlint:LINT, by default -Xlint. "" disables.

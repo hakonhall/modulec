@@ -95,7 +95,7 @@ class OptionsTest {
         assertEquals(List.of(context.pathname("src/main/resources")), params.resourceDirectories());
         assertEquals(List.of(context.pathname("src/main/java")), params.sourceDirectories());
         assertEquals(List.of(context.pathname("src/test/resources")), params.testResourceDirectories());
-        assertEquals(List.of(context.pathname("src/test/java")), params.testSourceDirectories());
+        assertEquals(List.of(context.pathname("src/test/java"), context.pathname("src/test/module-info.java")), params.testSourceDirectories());
         assertFalse(context.showCommands());
         assertFalse(context.showDebug());
         assertEquals(Optional.of(ModuleDescriptor.Version.parse("1.2.3")), params.version());

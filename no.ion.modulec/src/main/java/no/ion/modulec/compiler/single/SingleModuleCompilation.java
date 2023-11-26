@@ -234,7 +234,7 @@ class SingleModuleCompilation {
             Thread.currentThread().setContextClassLoader(moduleLoader);
             int exitCode;
             try {
-                this.params.log().command("javahms", "-p", modulePathString, "-c", moduleName, "-m", testBooterModule, testJarResult.pathname().toString());
+                params.log().command("javahms", "-p", modulePathString, "-c", moduleName, "-m", testBooterModule, testJarResult.pathname().toString());
                 exitCode = testBooter.intCall("runTests", Argument.of(Path.class, testJarResult.pathname().path()));
             } finally {
                 Thread.currentThread().setContextClassLoader(savedContext);
